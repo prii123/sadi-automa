@@ -1,4 +1,4 @@
-import { TriggerService } from '../src/app/services/triggerService';
+import { TriggerService } from '../src/services/triggerService';
 
 async function seedTriggers() {
   console.log('Creando triggers de ejemplo...');

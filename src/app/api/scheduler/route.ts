@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { SchedulerService } from '@/app/services/schedulerService';
+import { SchedulerService } from '@/services/schedulerService';
 
 // GET /api/scheduler - Obtener estado del scheduler
 export async function GET() {

@@ -241,8 +241,8 @@ export default function DashboardHome() {
           <div className="space-y-4">
             <div>
               <div className="flex justify-between text-sm mb-1">
-                <span>Certificados Activos</span>
-                <span>{estadisticas.certificadosActivos}/{estadisticas.totalEmpresas}</span>
+                <span className="text-gray-700 font-medium">Certificados Activos</span>
+                <span className="text-gray-900 font-semibold">{estadisticas.certificadosActivos}/{estadisticas.totalEmpresas}</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
@@ -254,8 +254,8 @@ export default function DashboardHome() {
 
             <div>
               <div className="flex justify-between text-sm mb-1">
-                <span>Resoluciones Activas</span>
-                <span>{estadisticas.resolucionesActivas}/{estadisticas.totalEmpresas}</span>
+                <span className="text-gray-700 font-medium">Resoluciones Activas</span>
+                <span className="text-gray-900 font-semibold">{estadisticas.resolucionesActivas}/{estadisticas.totalEmpresas}</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
@@ -267,8 +267,8 @@ export default function DashboardHome() {
 
             <div>
               <div className="flex justify-between text-sm mb-1">
-                <span>Documentos Activos</span>
-                <span>{estadisticas.documentosActivos}/{estadisticas.totalEmpresas}</span>
+                <span className="text-gray-700 font-medium">Documentos Activos</span>
+                <span className="text-gray-900 font-semibold">{estadisticas.documentosActivos}/{estadisticas.totalEmpresas}</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div

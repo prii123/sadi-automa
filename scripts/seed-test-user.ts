@@ -1,4 +1,4 @@
-import { AuthService } from '../src/app/services/authService';
+import { AuthService } from '../src/services/authService';
 
 async function seedTestUser() {
   console.log('Creando usuario de pruebas...');

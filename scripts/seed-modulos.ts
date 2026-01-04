@@ -1,4 +1,4 @@
-import pool from '../src/app/lib/database';
+import pool from '../src/lib/database';
 
 async function seedModulos() {
   console.log('Actualizando módulos de empresas con datos de ejemplo...');

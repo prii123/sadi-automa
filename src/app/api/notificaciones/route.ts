@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { NotificacionService } from '@/app/services/notificacionService';
+import { NotificacionService } from '@/services/notificacionService';
 
 // GET /api/notificaciones - Listar todas las notificaciones
 export async function GET(request: NextRequest) {

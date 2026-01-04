@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { NotificacionService } from '@/app/services/notificacionService';
+import { NotificacionService } from '@/services/notificacionService';
 
 // PUT /api/notificaciones/[id] - Marcar como resuelta
 export async function PUT(

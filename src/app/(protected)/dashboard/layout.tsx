@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Sidebar from '../../components/Sidebar';
-import { AuthUser } from '../../services/authService';
+import { AuthUser } from '@/services/authService';
 
 export default function DashboardLayout({
   children,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { EmpresaService } from '@/app/services/empresaService';
-import { Empresa } from '../../models';
+import { EmpresaService } from '@/services/empresaService';
+import { Empresa } from '@/models';
 
 // GET /api/empresas - Listar todas las empresas
 export async function GET() {

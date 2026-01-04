@@ -1,5 +1,5 @@
-import pool from '../src/app/lib/database';
-import { AuthService } from '../src/app/services/authService';
+import pool from '../src/lib/database';
+import { AuthService } from '../src/services/authService';
 
 async function initDatabase() {
   const client = await pool.connect();

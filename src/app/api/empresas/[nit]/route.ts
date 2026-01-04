@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { EmpresaService } from '@/app/services/empresaService';
+import { EmpresaService } from '@/services/empresaService';
 
 // GET /api/empresas/[nit] - Obtener empresa por NIT
 export async function GET(

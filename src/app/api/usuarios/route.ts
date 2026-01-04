@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { UsuarioService } from '@/app/services/usuarioService';
-import { Usuario } from '../../models';
+import { UsuarioService } from '@/services/usuarioService';
+import { Usuario } from '@/models';
 
 // GET /api/usuarios - Listar todos los usuarios
 export async function GET() {

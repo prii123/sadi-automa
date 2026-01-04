@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { EmpresaService } from '@/app/services/empresaService';
+import { EmpresaService } from '@/services/empresaService';
 
 // GET /api/estadisticas - Obtener estadísticas de módulos de empresa
 export async function GET() {

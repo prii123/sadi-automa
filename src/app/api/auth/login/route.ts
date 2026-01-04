@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { AuthService, LoginCredentials } from '@/app/services/authService';
+import { AuthService, LoginCredentials } from '@/services/authService';
 
 // POST /api/auth/login
 export async function POST(request: NextRequest) {

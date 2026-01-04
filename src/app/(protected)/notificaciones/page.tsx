@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { NotificacionConEmpresa } from '../../models';
+import { NotificacionConEmpresa } from '@/models';
 
 export default function NotificacionesPage() {
   const [notificaciones, setNotificaciones] = useState<NotificacionConEmpresa[]>([]);

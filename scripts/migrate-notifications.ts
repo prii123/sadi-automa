@@ -1,4 +1,4 @@
-import pool from '../src/app/lib/database';
+import pool from '../src/lib/database';
 
 async function migrateNotificationsTable() {
   const client = await pool.connect();

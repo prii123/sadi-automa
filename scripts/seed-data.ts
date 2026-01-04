@@ -1,4 +1,4 @@
-import { EmpresaService } from '../src/app/services/empresaService';
+import { EmpresaService } from '../src/services/empresaService';
 
 async function seedData() {
   console.log('Insertando datos de ejemplo...');

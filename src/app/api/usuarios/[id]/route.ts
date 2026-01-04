@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { UsuarioService } from '@/app/services/usuarioService';
+import { UsuarioService } from '@/services/usuarioService';
 
 // GET /api/usuarios/[id] - Obtener usuario por ID
 export async function GET(

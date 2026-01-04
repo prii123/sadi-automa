@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { TriggerService } from '@/app/services/triggerService';
-import { Trigger } from '../../models';
+import { TriggerService } from '@/services/triggerService';
+import { Trigger } from '@/models';
 
 // GET /api/triggers - Listar todos los triggers
 export async function GET() {

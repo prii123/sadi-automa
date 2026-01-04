@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { TriggerService } from '@/app/services/triggerService';
+import { TriggerService } from '@/services/triggerService';
 
 // GET /api/triggers/[id] - Obtener trigger por ID
 export async function GET(
