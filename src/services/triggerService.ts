@@ -160,9 +160,30 @@ export class TriggerService {
   static async delete(id: number): Promise<{ success: boolean; error?: string }> {
     const client = await pool.connect();
     try {
-      await client.query('DELETE FROM triggers WHERE id = $1', [id]);
+      // Iniciar transacción para asegurar integridad
+      await client.query('BEGIN');
+
+      // 1. Eliminar notificaciones relacionadas con este trigger
+      await client.query('DELETE FROM notificaciones WHERE trigger_id = $1', [id]);
+
+      // 2. Eliminar ejecuciones del trigger
+      await client.query('DELETE FROM trigger_ejecuciones WHERE trigger_id = $1', [id]);
+
+      // 3. Eliminar el trigger
+      const result = await client.query('DELETE FROM triggers WHERE id = $1 RETURNING id', [id]);
+
+      if (result.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return { success: false, error: 'Trigger no encontrado' };
+      }
+
+      // Confirmar transacción
+      await client.query('COMMIT');
+
       return { success: true };
     } catch (error) {
+      // Revertir transacción en caso de error
+      await client.query('ROLLBACK');
       return { success: false, error: (error as Error).message };
     } finally {
       client.release();

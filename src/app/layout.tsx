@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { SchedulerInitializer } from "../components/SchedulerInitializer";
 
 // Importar inicialización de la aplicación (solo en servidor)
 if (typeof window === 'undefined') {
@@ -32,6 +33,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <SchedulerInitializer />
         {children}
       </body>
     </html>

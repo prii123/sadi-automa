@@ -5,7 +5,7 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 interface EmailOptions {
-  to: string;
+  to: string | string[];
   subject: string;
   html?: string;
   text?: string;

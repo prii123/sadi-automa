@@ -298,11 +298,18 @@ export class SchedulerService {
       // Crear el contenido del correo
       const contenidoHTML = this.generarContenidoCorreoNotificaciones(notificacionesPendientes, trigger);
 
-      // Enviar el correo (por ahora a la cuenta configurada, pero debería ser configurable)
-      const destinatario = process.env.SMTP_USER || 'admin@sadi.com'; // TODO: Hacer configurable
+      // Enviar el correo a los destinatarios configurados en el trigger
+      const destinatarios = trigger.destinatarios.split(',').map(email => email.trim());
+
+      if (destinatarios.length === 0) {
+        console.warn(`⚠️ El trigger "${trigger.nombre}" no tiene destinatarios configurados`);
+        return;
+      }
+
+      console.log(`📧 Enviando correo a ${destinatarios.length} destinatario(s): ${destinatarios.join(', ')}`);
 
       const exito = await emailService.sendEmail({
-        to: destinatario,
+        to: destinatarios,
         subject: `📊 Reporte de Notificaciones - Trigger: ${trigger.nombre}`,
         html: contenidoHTML
       });
