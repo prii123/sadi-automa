@@ -341,117 +341,80 @@ export class EmpresaService {
   static async getEstadisticasModulos(): Promise<{ success: boolean; data?: any; error?: string }> {
     const client = await pool.connect();
     try {
-      // Obtener todas las empresas con sus módulos
-      const result = await client.query('SELECT * FROM empresas');
-      const rows = result.rows as EmpresaRow[];
+      // Obtener estadísticas de empresas
+      const empresasResult = await client.query('SELECT COUNT(*) as total, COUNT(CASE WHEN estado = \'activo\' THEN 1 END) as activas FROM empresas');
+      const empresasStats = empresasResult.rows[0];
 
-      const empresas: Empresa[] = rows.map(row => ({
-        id: row.id,
-        nit: row.nit,
-        nombre: row.nombre,
-        tipo: row.tipo,
-        estado: row.estado,
-        certificado: {
-          activo: row.cert_activo,
-          fecha_inicio: row.cert_fecha_inicio,
-          fecha_final: row.cert_fecha_final,
-          notificacion: row.cert_notificacion,
-          renovado: row.cert_renovado,
-          facturado: row.cert_facturado,
-          comentarios: row.cert_comentarios,
-        },
-        resolucion: {
-          activo: row.resol_activo,
-          fecha_inicio: row.resol_fecha_inicio,
-          fecha_final: row.resol_fecha_final,
-          notificacion: row.resol_notificacion,
-          renovado: row.resol_renovado,
-          facturado: row.resol_facturado,
-          comentarios: row.resol_comentarios,
-        },
-        documento: {
-          activo: row.doc_activo,
-          fecha_inicio: row.doc_fecha_inicio,
-          fecha_final: row.doc_fecha_final,
-          notificacion: row.doc_notificacion,
-          renovado: row.doc_renovado,
-          facturado: row.doc_facturado,
-          comentarios: row.doc_comentarios,
-        },
-      }));
+      // Estadísticas de certificados
+      const certResult = await client.query(`
+        SELECT
+          COUNT(*) as total,
+          COUNT(CASE WHEN activo = 1 THEN 1 END) as activos,
+          COUNT(CASE WHEN renovado = 1 THEN 1 END) as renovados,
+          COUNT(CASE WHEN facturado = 1 THEN 1 END) as facturados,
+          COUNT(CASE WHEN fecha_final >= CURRENT_DATE AND fecha_final <= CURRENT_DATE + INTERVAL '30 days' AND activo = 1 AND (renovado = 0 OR facturado = 0) THEN 1 END) as proximos_vencer,
+          COUNT(CASE WHEN fecha_final < CURRENT_DATE AND activo = 1 AND (renovado = 0 OR facturado = 0) THEN 1 END) as vencidos
+        FROM certificados
+      `);
+      const certStats = certResult.rows[0];
 
-      // Calcular estadísticas
+      // Estadísticas de resoluciones
+      const resolResult = await client.query(`
+        SELECT
+          COUNT(*) as total,
+          COUNT(CASE WHEN activo = 1 THEN 1 END) as activos,
+          COUNT(CASE WHEN renovado = 1 THEN 1 END) as renovados,
+          COUNT(CASE WHEN facturado = 1 THEN 1 END) as facturados,
+          COUNT(CASE WHEN fecha_final >= CURRENT_DATE AND fecha_final <= CURRENT_DATE + INTERVAL '30 days' AND activo = 1 AND (renovado = 0 OR facturado = 0) THEN 1 END) as proximos_vencer,
+          COUNT(CASE WHEN fecha_final < CURRENT_DATE AND activo = 1 AND (renovado = 0 OR facturado = 0) THEN 1 END) as vencidos
+        FROM resoluciones
+      `);
+      const resolStats = resolResult.rows[0];
+
+      // Estadísticas de documentos
+      const docResult = await client.query(`
+        SELECT
+          COUNT(*) as total,
+          COUNT(CASE WHEN activo = 1 THEN 1 END) as activos,
+          COUNT(CASE WHEN renovado = 1 THEN 1 END) as renovados,
+          COUNT(CASE WHEN facturado = 1 THEN 1 END) as facturados,
+          COUNT(CASE WHEN fecha_final >= CURRENT_DATE AND fecha_final <= CURRENT_DATE + INTERVAL '30 days' AND activo = 1 AND (renovado = 0 OR facturado = 0) THEN 1 END) as proximos_vencer,
+          COUNT(CASE WHEN fecha_final < CURRENT_DATE AND activo = 1 AND (renovado = 0 OR facturado = 0) THEN 1 END) as vencidos
+        FROM documentos
+      `);
+      const docStats = docResult.rows[0];
+
       const estadisticas = {
-        totalEmpresas: empresas.length,
-        empresasActivas: empresas.filter(e => e.estado === 'activo').length,
+        totalEmpresas: parseInt(empresasStats.total),
+        empresasActivas: parseInt(empresasStats.activas),
 
         // Certificados
-        certificadosActivos: empresas.filter(e => e.certificado.activo === 1).length,
-        certificadosRenovados: empresas.filter(e => e.certificado.renovado === 1).length,
-        certificadosFacturados: empresas.filter(e => e.certificado.facturado === 1).length,
+        certificadosActivos: parseInt(certStats.activos),
+        certificadosRenovados: parseInt(certStats.renovados),
+        certificadosFacturados: parseInt(certStats.facturados),
 
         // Resoluciones
-        resolucionesActivas: empresas.filter(e => e.resolucion.activo === 1).length,
-        resolucionesRenovadas: empresas.filter(e => e.resolucion.renovado === 1).length,
-        resolucionesFacturadas: empresas.filter(e => e.resolucion.facturado === 1).length,
+        resolucionesActivas: parseInt(resolStats.activos),
+        resolucionesRenovadas: parseInt(resolStats.renovados),
+        resolucionesFacturadas: parseInt(resolStats.facturados),
 
         // Documentos
-        documentosActivos: empresas.filter(e => e.documento.activo === 1).length,
-        documentosRenovados: empresas.filter(e => e.documento.renovado === 1).length,
-        documentosFacturados: empresas.filter(e => e.documento.facturado === 1).length,
+        documentosActivos: parseInt(docStats.activos),
+        documentosRenovados: parseInt(docStats.renovados),
+        documentosFacturados: parseInt(docStats.facturados),
 
-        // Próximos a vencer (30 días)
+        // Próximos a vencer
         proximosVencer: {
-          certificados: empresas.filter(e => {
-            if (!e.certificado.fecha_final) return false;
-            const fechaFinal = new Date(e.certificado.fecha_final);
-            const hoy = new Date();
-            const diffTime = fechaFinal.getTime() - hoy.getTime();
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            return diffDays <= 30 && diffDays >= 0 && e.certificado.activo === 1;
-          }).length,
-
-          resoluciones: empresas.filter(e => {
-            if (!e.resolucion.fecha_final) return false;
-            const fechaFinal = new Date(e.resolucion.fecha_final);
-            const hoy = new Date();
-            const diffTime = fechaFinal.getTime() - hoy.getTime();
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            return diffDays <= 30 && diffDays >= 0 && e.resolucion.activo === 1;
-          }).length,
-
-          documentos: empresas.filter(e => {
-            if (!e.documento.fecha_final) return false;
-            const fechaFinal = new Date(e.documento.fecha_final);
-            const hoy = new Date();
-            const diffTime = fechaFinal.getTime() - hoy.getTime();
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            return diffDays <= 30 && diffDays >= 0 && e.documento.activo === 1;
-          }).length,
+          certificados: parseInt(certStats.proximos_vencer),
+          resoluciones: parseInt(resolStats.proximos_vencer),
+          documentos: parseInt(docStats.proximos_vencer),
         },
 
         // Vencidos
         vencidos: {
-          certificados: empresas.filter(e => {
-            if (!e.certificado.fecha_final) return false;
-            const fechaFinal = new Date(e.certificado.fecha_final);
-            const hoy = new Date();
-            return fechaFinal < hoy && e.certificado.activo === 1;
-          }).length,
-
-          resoluciones: empresas.filter(e => {
-            if (!e.resolucion.fecha_final) return false;
-            const fechaFinal = new Date(e.resolucion.fecha_final);
-            const hoy = new Date();
-            return fechaFinal < hoy && e.resolucion.activo === 1;
-          }).length,
-
-          documentos: empresas.filter(e => {
-            if (!e.documento.fecha_final) return false;
-            const fechaFinal = new Date(e.documento.fecha_final);
-            const hoy = new Date();
-            return fechaFinal < hoy && e.documento.activo === 1;
-          }).length,
+          certificados: parseInt(certStats.vencidos),
+          resoluciones: parseInt(resolStats.vencidos),
+          documentos: parseInt(docStats.vencidos),
         }
       };
 

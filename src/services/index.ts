@@ -4,3 +4,7 @@ export * from './usuarioService';
 export * from './triggerService';
 export * from './notificacionService';
 export * from './schedulerService';
+export * from './certificadoService';
+export * from './resolucionService';
+export * from './documentoService';
+export * from './emailService';

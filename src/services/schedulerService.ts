@@ -2,6 +2,7 @@ import * as cron from 'node-cron';
 import { TriggerService } from './triggerService';
 import { NotificacionService } from './notificacionService';
 import { EmpresaService } from './empresaService';
+import { emailService } from './emailService';
 import { Trigger, TriggerEjecucion } from '../models';
 
 export class SchedulerService {
@@ -177,6 +178,7 @@ export class SchedulerService {
 
     let notificacionesEnviadas = 0;
     let empresasProcesadas = 0;
+    let correosEnviados = 0;
     let errorMensaje: string | undefined;
 
     try {
@@ -216,6 +218,18 @@ export class SchedulerService {
         }
       }
 
+      // Enviar correo con las notificaciones pendientes
+      try {
+        await this.enviarCorreoNotificacionesPendientes(trigger);
+        correosEnviados++;
+        console.log(`📧 Correo enviado para trigger: ${trigger.nombre}`);
+      } catch (error) {
+        console.error(`Error enviando correo para trigger ${trigger.nombre}:`, error);
+        if (!errorMensaje) {
+          errorMensaje = `Error enviando correo: ${(error as Error).message}`;
+        }
+      }
+
       // Actualizar última ejecución y calcular próxima
       const now = new Date();
       const proximaEjecucion = this.calcularProximaEjecucion(trigger, now);
@@ -242,7 +256,7 @@ export class SchedulerService {
 
     await TriggerService.registrarEjecucion(ejecucion);
 
-    console.log(`Trigger ${trigger.nombre} completado: ${notificacionesEnviadas} notificaciones enviadas`);
+    console.log(`Trigger ${trigger.nombre} completado: ${notificacionesEnviadas} notificaciones creadas, ${correosEnviados} correos enviados`);
   }
 
   // Filtrar empresas según prioridades
@@ -263,6 +277,191 @@ export class SchedulerService {
     // Lógica para determinar la prioridad más alta aplicable
     // Por ahora, usar la primera prioridad
     return prioridades[0] || 'MEDIA';
+  }
+
+  // Enviar correo con notificaciones pendientes
+  private async enviarCorreoNotificacionesPendientes(trigger: Trigger): Promise<void> {
+    try {
+      // Obtener todas las notificaciones pendientes
+      const notificacionesResult = await NotificacionService.getAll();
+      if (!notificacionesResult.success || !notificacionesResult.data) {
+        throw new Error('No se pudieron obtener las notificaciones');
+      }
+
+      const notificacionesPendientes = notificacionesResult.data.filter(n => n.estado === 'pendiente');
+
+      if (notificacionesPendientes.length === 0) {
+        console.log('No hay notificaciones pendientes para enviar');
+        return;
+      }
+
+      // Crear el contenido del correo
+      const contenidoHTML = this.generarContenidoCorreoNotificaciones(notificacionesPendientes, trigger);
+
+      // Enviar el correo (por ahora a la cuenta configurada, pero debería ser configurable)
+      const destinatario = process.env.SMTP_USER || 'admin@sadi.com'; // TODO: Hacer configurable
+
+      const exito = await emailService.sendEmail({
+        to: destinatario,
+        subject: `📊 Reporte de Notificaciones - Trigger: ${trigger.nombre}`,
+        html: contenidoHTML
+      });
+
+      if (!exito) {
+        throw new Error('Error enviando el correo de notificaciones');
+      }
+
+    } catch (error) {
+      console.error('Error enviando correo de notificaciones:', error);
+      throw error;
+    }
+  }
+
+  // Generar contenido HTML para el correo de notificaciones
+  private generarContenidoCorreoNotificaciones(notificaciones: any[], trigger: Trigger): string {
+    const fechaActual = new Date().toLocaleDateString('es-ES', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    // Agrupar notificaciones por prioridad
+    const porPrioridad = {
+      CRITICA: notificaciones.filter(n => n.prioridad === 'CRITICA'),
+      ALTA: notificaciones.filter(n => n.prioridad === 'ALTA'),
+      MEDIA: notificaciones.filter(n => n.prioridad === 'MEDIA'),
+      BAJA: notificaciones.filter(n => n.prioridad === 'BAJA')
+    };
+
+    const totalNotificaciones = notificaciones.length;
+
+    return `
+      <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: 0 auto; background-color: #ffffff;">
+        <!-- Header -->
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="color: white; margin: 0; font-size: 28px; font-weight: 600;">📊 Reporte de Notificaciones</h1>
+          <p style="color: #e0e7ff; margin: 5px 0 0 0; font-size: 16px;">Sistema SADI - Trigger Automático</p>
+        </div>
+
+        <!-- Información del Trigger -->
+        <div style="padding: 20px; background-color: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+          <h2 style="color: #1e293b; margin: 0 0 15px 0; font-size: 20px;">🔄 Trigger Ejecutado</h2>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="padding: 8px 0; font-weight: 600; color: #475569; width: 140px;">Nombre:</td>
+              <td style="padding: 8px 0; color: #1e293b;">${trigger.nombre}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: 600; color: #475569;">Descripción:</td>
+              <td style="padding: 8px 0; color: #1e293b;">${trigger.descripcion}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: 600; color: #475569;">Frecuencia:</td>
+              <td style="padding: 8px 0; color: #1e293b;">${trigger.frecuencia}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; font-weight: 600; color: #475569;">Fecha de Ejecución:</td>
+              <td style="padding: 8px 0; color: #1e293b;">${fechaActual}</td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- Resumen de Notificaciones -->
+        <div style="padding: 20px;">
+          <h2 style="color: #1e293b; margin: 0 0 20px 0; font-size: 20px;">📈 Resumen de Notificaciones</h2>
+
+          <div style="display: flex; gap: 15px; margin-bottom: 30px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 200px; background-color: #fee2e2; padding: 15px; border-radius: 8px; border-left: 4px solid #dc2626;">
+              <h3 style="color: #dc2626; margin: 0 0 10px 0; font-size: 16px;">🚨 Críticas</h3>
+              <p style="color: #dc2626; margin: 0; font-size: 24px; font-weight: bold;">${porPrioridad.CRITICA.length}</p>
+            </div>
+            <div style="flex: 1; min-width: 200px; background-color: #fed7aa; padding: 15px; border-radius: 8px; border-left: 4px solid #ea580c;">
+              <h3 style="color: #ea580c; margin: 0 0 10px 0; font-size: 16px;">⚠️ Altas</h3>
+              <p style="color: #ea580c; margin: 0; font-size: 24px; font-weight: bold;">${porPrioridad.ALTA.length}</p>
+            </div>
+            <div style="flex: 1; min-width: 200px; background-color: #fef3c7; padding: 15px; border-radius: 8px; border-left: 4px solid #d97706;">
+              <h3 style="color: #d97706; margin: 0 0 10px 0; font-size: 16px;">📋 Medias</h3>
+              <p style="color: #d97706; margin: 0; font-size: 24px; font-weight: bold;">${porPrioridad.MEDIA.length}</p>
+            </div>
+            <div style="flex: 1; min-width: 200px; background-color: #f0fdf4; padding: 15px; border-radius: 8px; border-left: 4px solid #16a34a;">
+              <h3 style="color: #16a34a; margin: 0 0 10px 0; font-size: 16px;">ℹ️ Bajas</h3>
+              <p style="color: #16a34a; margin: 0; font-size: 24px; font-weight: bold;">${porPrioridad.BAJA.length}</p>
+            </div>
+          </div>
+
+          <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <h3 style="color: #1e293b; margin: 0 0 15px 0;">📊 Total de Notificaciones Pendientes</h3>
+            <p style="font-size: 36px; font-weight: bold; color: #667eea; margin: 0; text-align: center;">${totalNotificaciones}</p>
+          </div>
+        </div>
+
+        <!-- Detalle de Notificaciones -->
+        ${this.generarDetalleNotificaciones(porPrioridad)}
+
+        <!-- Footer -->
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; border-radius: 0 0 8px 8px; border-top: 1px solid #e2e8f0;">
+          <p style="color: #64748b; margin: 0; font-size: 14px;">
+            <strong>SADI</strong> - Sistema de Administración y Documentación Integral<br>
+            Reporte generado automáticamente por trigger: ${trigger.nombre}
+          </p>
+        </div>
+      </div>
+    `;
+  }
+
+  // Generar detalle de notificaciones por prioridad
+  private generarDetalleNotificaciones(porPrioridad: any): string {
+    const secciones = [];
+
+    const prioridades = [
+      { key: 'CRITICA', titulo: '🚨 Notificaciones Críticas', color: '#dc2626' },
+      { key: 'ALTA', titulo: '⚠️ Notificaciones Altas', color: '#ea580c' },
+      { key: 'MEDIA', titulo: '📋 Notificaciones Medias', color: '#d97706' },
+      { key: 'BAJA', titulo: 'ℹ️ Notificaciones Bajas', color: '#16a34a' }
+    ];
+
+    for (const prioridad of prioridades) {
+      const notificaciones = porPrioridad[prioridad.key];
+      if (notificaciones.length > 0) {
+        const listaNotificaciones = notificaciones.map((n: any) => `
+          <tr>
+            <td style="padding: 12px 8px; border-bottom: 1px solid #e2e8f0; color: #475569;">${n.titulo}</td>
+            <td style="padding: 12px 8px; border-bottom: 1px solid #e2e8f0; color: #475569;">${n.mensaje}</td>
+            <td style="padding: 12px 8px; border-bottom: 1px solid #e2e8f0; color: #475569;">${new Date(n.fecha_creacion).toLocaleDateString('es-ES')}</td>
+          </tr>
+        `).join('');
+
+        secciones.push(`
+          <div style="margin-bottom: 30px;">
+            <h3 style="color: ${prioridad.color}; margin: 0 0 15px 0; font-size: 18px;">${prioridad.titulo} (${notificaciones.length})</h3>
+            <div style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+              <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                  <tr style="background-color: #f8fafc;">
+                    <th style="padding: 12px 8px; text-align: left; font-weight: 600; color: #1e293b; border-bottom: 2px solid #e2e8f0;">Título</th>
+                    <th style="padding: 12px 8px; text-align: left; font-weight: 600; color: #1e293b; border-bottom: 2px solid #e2e8f0;">Mensaje</th>
+                    <th style="padding: 12px 8px; text-align: left; font-weight: 600; color: #1e293b; border-bottom: 2px solid #e2e8f0;">Fecha</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${listaNotificaciones}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `);
+      }
+    }
+
+    return secciones.length > 0 ? `
+      <div style="padding: 0 20px 20px 20px;">
+        <h2 style="color: #1e293b; margin: 0 0 20px 0; font-size: 20px;">📋 Detalle de Notificaciones</h2>
+        ${secciones.join('')}
+      </div>
+    ` : '';
   }
 
   // Obtener estado del scheduler

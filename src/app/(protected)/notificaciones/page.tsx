@@ -42,20 +42,7 @@ export default function NotificacionesPage() {
       let data = await response.json();
 
       if (data.success) {
-        let notificacionesFiltradas = data.data;
-
-        // Aplicar filtro adicional en el frontend si es necesario
-        if (tipoParam === 'proximos_vencer') {
-          notificacionesFiltradas = data.data.filter((n: any) =>
-            n.mensaje.includes('vence en') || n.mensaje.includes('próximo a vencer')
-          );
-        } else if (tipoParam === 'vencidos') {
-          notificacionesFiltradas = data.data.filter((n: any) =>
-            n.mensaje.includes('vencido') || n.mensaje.includes('vencida')
-          );
-        }
-
-        setNotificaciones(notificacionesFiltradas);
+        setNotificaciones(data.data);
       }
     } catch (error) {
       console.error('Error cargando notificaciones:', error);
@@ -77,58 +64,32 @@ export default function NotificacionesPage() {
     if (!notificacion.empresa_nit) return;
 
     try {
-      // Obtener empresa actual
-      const empresaResponse = await fetch(`/api/empresas/${notificacion.empresa_nit}`);
-      const empresaData = await empresaResponse.json();
-
-      if (!empresaData.success) {
-        alert('Error al obtener datos de la empresa');
-        return;
-      }
-
-      const empresa = empresaData.data;
-      let updateData = {};
-
-      // Determinar qué módulo actualizar basado en el tipo de notificación
-      if (notificacion.tipo === 'certificado') {
-        updateData = {
-          certificado: {
-            ...empresa.certificado,
-            renovado: 1
-          }
-        };
-      } else if (notificacion.tipo === 'resolucion') {
-        updateData = {
-          resolucion: {
-            ...empresa.resolucion,
-            renovado: 1
-          }
-        };
-      } else if (notificacion.tipo === 'documento') {
-        updateData = {
-          documento: {
-            ...empresa.documento,
-            renovado: 1
-          }
-        };
-      }
-
-      // Actualizar empresa
-      const updateResponse = await fetch(`/api/empresas/${notificacion.empresa_nit}`, {
-        method: 'PUT',
+      const response = await fetch(`/api/notificaciones/${notificacion.id}/renovar`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(updateData),
+        body: JSON.stringify({
+          tipo: notificacion.tipo,
+          empresa_id: notificacion.empresa_id
+        })
       });
 
-      const updateResult = await updateResponse.json();
-      if (updateResult.success) {
-        // Marcar notificación como resuelta
-        await handleMarcarResuelta(notificacion.id!);
+      const data = await response.json();
+
+      if (data.success) {
+        // Marcar notificación como resuelta directamente
+        try {
+          await fetch(`/api/notificaciones/${notificacion.id}`, {
+            method: 'PUT'
+          });
+        } catch (error) {
+          console.error('Error marcando notificación como resuelta:', error);
+        }
+        fetchNotificaciones();
         alert('Documento marcado como renovado');
       } else {
-        alert('Error al marcar como renovado: ' + updateResult.error);
+        alert(data.error || 'Error al marcar como renovado');
       }
     } catch (error) {
       console.error('Error marcando como renovado:', error);
@@ -140,79 +101,36 @@ export default function NotificacionesPage() {
     if (!notificacion.empresa_nit) return;
 
     try {
-      // Obtener empresa actual
-      const empresaResponse = await fetch(`/api/empresas/${notificacion.empresa_nit}`);
-      const empresaData = await empresaResponse.json();
-
-      if (!empresaData.success) {
-        alert('Error al obtener datos de la empresa');
-        return;
-      }
-
-      const empresa = empresaData.data;
-      let updateData = {};
-
-      // Determinar qué módulo actualizar basado en el tipo de notificación
-      if (notificacion.tipo === 'certificado') {
-        updateData = {
-          certificado: {
-            ...empresa.certificado,
-            facturado: 1
-          }
-        };
-      } else if (notificacion.tipo === 'resolucion') {
-        updateData = {
-          resolucion: {
-            ...empresa.resolucion,
-            facturado: 1
-          }
-        };
-      } else if (notificacion.tipo === 'documento') {
-        updateData = {
-          documento: {
-            ...empresa.documento,
-            facturado: 1
-          }
-        };
-      }
-
-      // Actualizar empresa
-      const updateResponse = await fetch(`/api/empresas/${notificacion.empresa_nit}`, {
-        method: 'PUT',
+      const response = await fetch(`/api/notificaciones/${notificacion.id}/facturar`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(updateData),
+        body: JSON.stringify({
+          tipo: notificacion.tipo,
+          empresa_id: notificacion.empresa_id
+        })
       });
 
-      const updateResult = await updateResponse.json();
-      if (updateResult.success) {
-        // Marcar notificación como resuelta
-        await handleMarcarResuelta(notificacion.id!);
+      const data = await response.json();
+
+      if (data.success) {
+        // Marcar notificación como resuelta directamente
+        try {
+          await fetch(`/api/notificaciones/${notificacion.id}`, {
+            method: 'PUT'
+          });
+        } catch (error) {
+          console.error('Error marcando notificación como resuelta:', error);
+        }
+        fetchNotificaciones();
         alert('Documento marcado como facturado');
       } else {
-        alert('Error al marcar como facturado: ' + updateResult.error);
+        alert(data.error || 'Error al marcar como facturado');
       }
     } catch (error) {
       console.error('Error marcando como facturado:', error);
       alert('Error al marcar como facturado');
-    }
-  };
-
-  const handleMarcarResuelta = async (id: number) => {
-    try {
-      const response = await fetch(`/api/notificaciones/${id}`, {
-        method: 'PUT'
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        fetchNotificaciones();
-      } else {
-        alert(data.error);
-      }
-    } catch (error) {
-      console.error('Error marcando notificación como resuelta:', error);
     }
   };
 
@@ -425,20 +343,8 @@ export default function NotificacionesPage() {
                           >
                             💰 Facturado
                           </button>
-                          <button
-                            onClick={() => handleMarcarResuelta(notificacion.id!)}
-                            className="bg-green-600 text-white px-3 py-1 rounded-md text-sm hover:bg-green-700"
-                          >
-                            Resolver
-                          </button>
                         </>
                       )}
-                      <button
-                        onClick={() => handleEliminar(notificacion.id!)}
-                        className="bg-red-600 text-white px-3 py-1 rounded-md text-sm hover:bg-red-700"
-                      >
-                        Eliminar
-                      </button>
                     </div>
                   </div>
                 </div>
