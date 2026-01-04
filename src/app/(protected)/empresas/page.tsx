@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Empresa } from '@/models';
 
 export default function EmpresasPage() {
+  const router = useRouter();
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -241,6 +243,12 @@ export default function EmpresasPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        onClick={() => router.push(`/empresas/${empresa.nit}`)}
+                        className="text-green-600 hover:text-green-900 mr-4"
+                      >
+                        Gestionar
+                      </button>
                       <button
                         onClick={() => handleEdit(empresa)}
                         className="text-blue-600 hover:text-blue-900 mr-4"

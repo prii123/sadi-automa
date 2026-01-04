@@ -10,6 +10,7 @@ export interface Notificacion {
   fecha_envio?: Date;
   resuelta: number; // 0 o 1
   trigger_id?: number;
+  documento_id?: number;
 }
 
 export interface NotificacionConEmpresa extends Notificacion {

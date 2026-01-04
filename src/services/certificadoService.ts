@@ -54,18 +54,33 @@ export class CertificadoService {
     }
   }
 
-  // Obtener por empresa
-  static async getByEmpresaId(empresaId: number): Promise<{ success: boolean; data?: Certificado; error?: string }> {
+  // Obtener por empresa (todos los certificados)
+  static async getByEmpresaId(empresaId: number): Promise<{ success: boolean; data?: Certificado[]; error?: string }> {
     const client = await pool.connect();
     try {
-      const query = 'SELECT * FROM certificados WHERE empresa_id = $1';
+      const query = 'SELECT * FROM certificados WHERE empresa_id = $1 ORDER BY fecha_creacion DESC';
       const result = await client.query(query, [empresaId]);
 
+      return { success: true, data: result.rows as Certificado[] };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    } finally {
+      client.release();
+    }
+  }
+
+  // Obtener empresa por NIT
+  static async getEmpresaByNit(nit: string): Promise<{ success: boolean; data?: { id: number; nombre: string; nit: string }; error?: string }> {
+    const client = await pool.connect();
+    try {
+      const query = 'SELECT id, nombre, nit FROM empresas WHERE nit = $1';
+      const result = await client.query(query, [nit]);
+
       if (result.rows.length === 0) {
-        return { success: false, error: 'Certificado no encontrado para esta empresa' };
+        return { success: false, error: 'Empresa no encontrada' };
       }
 
-      return { success: true, data: result.rows[0] as Certificado };
+      return { success: true, data: result.rows[0] };
     } catch (error) {
       return { success: false, error: (error as Error).message };
     } finally {

@@ -105,19 +105,6 @@ async function initDatabase() {
       )
     `);
 
-    // Tabla notificaciones
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS notificaciones (
-        id SERIAL PRIMARY KEY,
-        empresa_id INTEGER NOT NULL REFERENCES empresas(id),
-        tipo TEXT NOT NULL,
-        prioridad TEXT NOT NULL,
-        mensaje TEXT NOT NULL,
-        fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        resuelta INTEGER DEFAULT 0
-      )
-    `);
-
     console.log('Base de datos PostgreSQL inicializada correctamente.');
 
     // Crear usuario administrador por defecto

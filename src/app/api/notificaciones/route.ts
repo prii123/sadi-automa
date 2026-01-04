@@ -1,19 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { NotificacionService } from '@/services/notificacionService';
 
-// GET /api/notificaciones - Listar todas las notificaciones
+// GET /api/notificaciones - Listar todas las notificaciones calculadas en tiempo real
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const resueltas = searchParams.get('resueltas');
   const tipo = searchParams.get('tipo');
 
   try {
-    let result;
-    if (resueltas === 'false') {
-      result = await NotificacionService.getNoResueltas();
-    } else {
-      result = await NotificacionService.getAll();
-    }
+    const result = await NotificacionService.getAll();
 
     if (result.success && result.data) {
       let notificaciones = result.data;
@@ -34,22 +28,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, data: notificaciones });
     } else {
       return NextResponse.json({ success: false, error: result.error }, { status: 500 });
-    }
-  } catch (error) {
-    return NextResponse.json({ success: false, error: (error as Error).message }, { status: 500 });
-  }
-}
-
-// POST /api/notificaciones - Crear nueva notificación
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const result = await NotificacionService.create(body);
-
-    if (result.success) {
-      return NextResponse.json({ success: true, data: result.data }, { status: 201 });
-    } else {
-      return NextResponse.json({ success: false, error: result.error }, { status: 400 });
     }
   } catch (error) {
     return NextResponse.json({ success: false, error: (error as Error).message }, { status: 500 });

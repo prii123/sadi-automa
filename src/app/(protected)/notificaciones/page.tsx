@@ -18,13 +18,11 @@ export default function NotificacionesPage() {
   useEffect(() => {
     fetchNotificaciones();
     fetchEstadisticas();
-  }, [filtro]);
+  }, []);
 
   const fetchNotificaciones = async () => {
     try {
-      let url = filtro === 'pendientes'
-        ? '/api/notificaciones?resueltas=false'
-        : '/api/notificaciones';
+      let url = '/api/notificaciones';
 
       // Agregar filtro por tipo si viene desde dashboard
       if (tipoParam) {
@@ -52,105 +50,19 @@ export default function NotificacionesPage() {
   };
 
   const fetchEstadisticas = async () => {
-    // Por ahora no implementamos estadísticas detalladas
-    // Podríamos crear un endpoint separado para esto
+    try {
+      const response = await fetch('/api/notificaciones/estadisticas');
+      const data = await response.json();
+      if (data.success) {
+        setEstadisticas(data.data);
+      }
+    } catch (error) {
+      console.error('Error cargando estadísticas:', error);
+    }
   };
 
   const cambiarFiltro = (nuevoFiltro: 'todas' | 'pendientes') => {
     router.push(`/notificaciones?filtro=${nuevoFiltro}`);
-  };
-
-  const handleMarcarRenovado = async (notificacion: NotificacionConEmpresa) => {
-    if (!notificacion.empresa_nit) return;
-
-    try {
-      const response = await fetch(`/api/notificaciones/${notificacion.id}/renovar`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          tipo: notificacion.tipo,
-          empresa_id: notificacion.empresa_id
-        })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        // Marcar notificación como resuelta directamente
-        try {
-          await fetch(`/api/notificaciones/${notificacion.id}`, {
-            method: 'PUT'
-          });
-        } catch (error) {
-          console.error('Error marcando notificación como resuelta:', error);
-        }
-        fetchNotificaciones();
-        alert('Documento marcado como renovado');
-      } else {
-        alert(data.error || 'Error al marcar como renovado');
-      }
-    } catch (error) {
-      console.error('Error marcando como renovado:', error);
-      alert('Error al marcar como renovado');
-    }
-  };
-
-  const handleMarcarFacturado = async (notificacion: NotificacionConEmpresa) => {
-    if (!notificacion.empresa_nit) return;
-
-    try {
-      const response = await fetch(`/api/notificaciones/${notificacion.id}/facturar`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          tipo: notificacion.tipo,
-          empresa_id: notificacion.empresa_id
-        })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        // Marcar notificación como resuelta directamente
-        try {
-          await fetch(`/api/notificaciones/${notificacion.id}`, {
-            method: 'PUT'
-          });
-        } catch (error) {
-          console.error('Error marcando notificación como resuelta:', error);
-        }
-        fetchNotificaciones();
-        alert('Documento marcado como facturado');
-      } else {
-        alert(data.error || 'Error al marcar como facturado');
-      }
-    } catch (error) {
-      console.error('Error marcando como facturado:', error);
-      alert('Error al marcar como facturado');
-    }
-  };
-
-  const handleEliminar = async (id: number) => {
-    if (!confirm('¿Estás seguro de que quieres eliminar esta notificación?')) return;
-
-    try {
-      const response = await fetch(`/api/notificaciones/${id}`, {
-        method: 'DELETE'
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        fetchNotificaciones();
-      } else {
-        alert(data.error);
-      }
-    } catch (error) {
-      console.error('Error eliminando notificación:', error);
-    }
   };
 
   const getPrioridadColor = (prioridad: string) => {
@@ -201,27 +113,29 @@ export default function NotificacionesPage() {
 
       {/* Filtros */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-        <div className="flex space-x-4">
-          <button
-            onClick={() => cambiarFiltro('pendientes')}
-            className={`px-4 py-2 rounded-md ${
-              filtro === 'pendientes'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            Pendientes
-          </button>
-          <button
-            onClick={() => cambiarFiltro('todas')}
-            className={`px-4 py-2 rounded-md ${
-              filtro === 'todas'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            Todas
-          </button>
+        <div className="flex space-x-4 items-center">
+          <div className="flex space-x-4">
+            <button
+              onClick={() => cambiarFiltro('pendientes')}
+              className={`px-4 py-2 rounded-md ${
+                filtro === 'pendientes'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Pendientes
+            </button>
+            <button
+              onClick={() => cambiarFiltro('todas')}
+              className={`px-4 py-2 rounded-md ${
+                filtro === 'todas'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Todas
+            </button>
+          </div>
         </div>
       </div>
 
@@ -254,12 +168,12 @@ export default function NotificacionesPage() {
         <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <span className="text-2xl">✅</span>
+              <span className="text-2xl">📅</span>
             </div>
             <div className="ml-4">
-              <h3 className="text-sm font-medium text-gray-900">Resueltas</h3>
+              <h3 className="text-sm font-medium text-gray-900">Vencidas</h3>
               <p className="text-2xl font-semibold text-green-600">
-                {notificaciones.filter(n => Number(n.resuelta) === 1).length}
+                {notificaciones.filter(n => n.mensaje.includes('venció')).length}
               </p>
             </div>
           </div>
@@ -286,13 +200,14 @@ export default function NotificacionesPage() {
               </div>
               {tipoParam && (
                 <div className="text-sm text-gray-500 mt-2">
-                  Las notificaciones se generan automáticamente cuando el sistema detecta documentos próximos a vencer o vencidos.
+                  Las notificaciones se calculan automáticamente en tiempo real desde los documentos de las empresas.
+                  Para renovar o facturar documentos, ve a la página de la empresa correspondiente.
                   <br />
                   <button
-                    onClick={() => router.push('/notificaciones')}
+                    onClick={() => router.push('/empresas')}
                     className="text-blue-600 hover:text-blue-800 underline mt-1"
                   >
-                    Ver todas las notificaciones
+                    Ir a Empresas
                   </button>
                 </div>
               )}
@@ -300,7 +215,7 @@ export default function NotificacionesPage() {
           ) : (
             <div className="divide-y divide-gray-200">
               {notificaciones.map((notificacion) => (
-                <div key={notificacion.id} className="p-6 hover:bg-gray-50">
+                <div key={`${notificacion.tipo}-${notificacion.id || notificacion.documento_id}`} className="p-6 hover:bg-gray-50">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center space-x-2 mb-2">
@@ -325,26 +240,6 @@ export default function NotificacionesPage() {
                           {new Date(notificacion.fecha_creacion).toLocaleString()}
                         </span>
                       </div>
-                    </div>
-                    <div className="flex space-x-2 ml-4">
-                      {Number(notificacion.resuelta) === 0 && (
-                        <>
-                          <button
-                            onClick={() => handleMarcarRenovado(notificacion)}
-                            className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700"
-                            title="Marcar como renovado"
-                          >
-                            🔄 Renovado
-                          </button>
-                          <button
-                            onClick={() => handleMarcarFacturado(notificacion)}
-                            className="bg-purple-600 text-white px-3 py-1 rounded-md text-sm hover:bg-purple-700"
-                            title="Marcar como facturado"
-                          >
-                            💰 Facturado
-                          </button>
-                        </>
-                      )}
                     </div>
                   </div>
                 </div>

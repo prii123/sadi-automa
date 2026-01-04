@@ -1,7 +1,7 @@
 import * as cron from 'node-cron';
 import { TriggerService } from './triggerService';
-import { NotificacionService } from './notificacionService';
 import { EmpresaService } from './empresaService';
+import { NotificacionService } from './notificacionService';
 import { emailService } from './emailService';
 import { Trigger, TriggerEjecucion } from '../models';
 
@@ -32,7 +32,7 @@ export class SchedulerService {
       try {
         await this.checkAndExecuteTriggers();
       } catch (error) {
-        console.error('Error en scheduler:', error);
+        console.error('Error en scheduler de triggers:', error);
       }
     });
 
@@ -176,9 +176,9 @@ export class SchedulerService {
   private async executeTrigger(trigger: Trigger): Promise<void> {
     console.log(`Ejecutando trigger: ${trigger.nombre}`);
 
-    let notificacionesEnviadas = 0;
     let empresasProcesadas = 0;
     let correosEnviados = 0;
+    let notificaciones: any[] = [];
     let errorMensaje: string | undefined;
 
     try {
@@ -195,32 +195,17 @@ export class SchedulerService {
       const prioridades = trigger.prioridades.split(',').map(p => p.trim());
       const empresasFiltradas = this.filtrarEmpresasPorPrioridades(empresas, prioridades);
 
-      // Crear notificaciones para cada empresa
-      for (const empresa of empresasFiltradas) {
-        try {
-          const notificacionResult = await NotificacionService.create({
-            empresa_id: empresa.id,
-            tipo: 'trigger',
-            titulo: `Notificación automática: ${trigger.nombre}`,
-            mensaje: trigger.descripcion,
-            prioridad: this.determinarPrioridadNotificacion(empresa, prioridades),
-            estado: 'pendiente',
-            fecha_creacion: new Date(),
-            resuelta: 0,
-            trigger_id: trigger.id
-          });
+      // NOTA: Los triggers ya no crean notificaciones automáticamente.
+      // Las notificaciones se generan por análisis automático de fechas de vencimiento.
+      console.log(`📊 Trigger ${trigger.nombre} procesó ${empresasFiltradas.length} empresas`);
 
-          if (notificacionResult.success) {
-            notificacionesEnviadas++;
-          }
-        } catch (error) {
-          console.error(`Error creando notificación para empresa ${empresa.nombre}:`, error);
-        }
-      }
-
-      // Enviar correo con las notificaciones pendientes
+      // Enviar correo con información del trigger (sin notificaciones específicas)
       try {
-        await this.enviarCorreoNotificacionesPendientes(trigger);
+        // Obtener las notificaciones actuales
+        const notifsResult = await NotificacionService.getAll();
+        notificaciones = notifsResult.success && notifsResult.data ? notifsResult.data : [];
+
+        await this.enviarCorreoTrigger(trigger, empresasFiltradas, notificaciones);
         correosEnviados++;
         console.log(`📧 Correo enviado para trigger: ${trigger.nombre}`);
       } catch (error) {
@@ -249,14 +234,14 @@ export class SchedulerService {
       trigger_id: trigger.id!,
       trigger_nombre: trigger.nombre,
       estado: errorMensaje ? 'fallido' : 'exitoso',
-      notificaciones_enviadas: notificacionesEnviadas,
+      notificaciones_enviadas: notificaciones.length, // Número de notificaciones enviadas
       empresas_procesadas: empresasProcesadas,
       error_mensaje: errorMensaje
     };
 
     await TriggerService.registrarEjecucion(ejecucion);
 
-    console.log(`Trigger ${trigger.nombre} completado: ${notificacionesEnviadas} notificaciones creadas, ${correosEnviados} correos enviados`);
+    console.log(`Trigger ${trigger.nombre} completado: ${empresasProcesadas} empresas procesadas, ${correosEnviados} correos enviados`);
   }
 
   // Filtrar empresas según prioridades
@@ -279,24 +264,44 @@ export class SchedulerService {
     return prioridades[0] || 'MEDIA';
   }
 
-  // Enviar correo con notificaciones pendientes
-  private async enviarCorreoNotificacionesPendientes(trigger: Trigger): Promise<void> {
+  // Enviar correo con información del trigger
+  private async enviarCorreoTrigger(trigger: Trigger, empresas: any[], notificaciones: any[]): Promise<void> {
     try {
-      // Obtener todas las notificaciones pendientes
-      const notificacionesResult = await NotificacionService.getAll();
-      if (!notificacionesResult.success || !notificacionesResult.data) {
-        throw new Error('No se pudieron obtener las notificaciones');
-      }
+      // Crear el contenido del correo con información del trigger
+      const contenidoHTML = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px;">
+            📊 Trigger Ejecutado: ${trigger.nombre}
+          </h2>
 
-      const notificacionesPendientes = notificacionesResult.data.filter(n => n.estado === 'pendiente');
+          <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <h3 style="color: #495057; margin-top: 0;">Descripción del Trigger</h3>
+            <p style="margin-bottom: 0;">${trigger.descripcion}</p>
+          </div>
 
-      if (notificacionesPendientes.length === 0) {
-        console.log('No hay notificaciones pendientes para enviar');
-        return;
-      }
+          <div style="background-color: #e9ecef; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <h3 style="color: #495057; margin-top: 0;">Empresas Procesadas</h3>
+            <p style="margin-bottom: 5px;"><strong>Total de empresas:</strong> ${empresas.length}</p>
+            <p style="margin-bottom: 5px;"><strong>Prioridades:</strong> ${trigger.prioridades}</p>
+            <p style="margin-bottom: 0;"><strong>Frecuencia:</strong> ${trigger.frecuencia}</p>
+          </div>
 
-      // Crear el contenido del correo
-      const contenidoHTML = this.generarContenidoCorreoNotificaciones(notificacionesPendientes, trigger);
+          ${this.generarContenidoCorreoNotificaciones(notificaciones, trigger)}
+
+          <div style="background-color: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <h3 style="color: #155724; margin-top: 0;">✅ Ejecución Exitosa</h3>
+            <p style="margin-bottom: 0; color: #155724;">
+              El trigger se ejecutó correctamente según lo programado.
+            </p>
+          </div>
+
+          <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 12px;">
+            <p style="margin-bottom: 0;">
+              Este es un correo automático generado por el sistema SADI.
+            </p>
+          </div>
+        </div>
+      `;
 
       // Enviar el correo a los destinatarios configurados en el trigger
       const destinatarios = trigger.destinatarios.split(',').map(email => email.trim());
@@ -306,20 +311,20 @@ export class SchedulerService {
         return;
       }
 
-      console.log(`📧 Enviando correo a ${destinatarios.length} destinatario(s): ${destinatarios.join(', ')}`);
+      console.log(`📧 Enviando correo de trigger a ${destinatarios.length} destinatario(s): ${destinatarios.join(', ')}`);
 
       const exito = await emailService.sendEmail({
         to: destinatarios,
-        subject: `📊 Reporte de Notificaciones - Trigger: ${trigger.nombre}`,
+        subject: `📊 Trigger Ejecutado: ${trigger.nombre}`,
         html: contenidoHTML
       });
 
       if (!exito) {
-        throw new Error('Error enviando el correo de notificaciones');
+        throw new Error('Error enviando el correo del trigger');
       }
 
     } catch (error) {
-      console.error('Error enviando correo de notificaciones:', error);
+      console.error('Error enviando correo del trigger:', error);
       throw error;
     }
   }

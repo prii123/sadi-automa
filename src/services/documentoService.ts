@@ -54,18 +54,33 @@ export class DocumentoService {
     }
   }
 
-  // Obtener por empresa
-  static async getByEmpresaId(empresaId: number): Promise<{ success: boolean; data?: Documento; error?: string }> {
+  // Obtener por empresa (todos los documentos)
+  static async getByEmpresaId(empresaId: number): Promise<{ success: boolean; data?: Documento[]; error?: string }> {
     const client = await pool.connect();
     try {
-      const query = 'SELECT * FROM documentos WHERE empresa_id = $1';
+      const query = 'SELECT * FROM documentos WHERE empresa_id = $1 ORDER BY fecha_creacion DESC';
       const result = await client.query(query, [empresaId]);
 
+      return { success: true, data: result.rows as Documento[] };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    } finally {
+      client.release();
+    }
+  }
+
+  // Obtener empresa por NIT
+  static async getEmpresaByNit(nit: string): Promise<{ success: boolean; data?: { id: number; nombre: string; nit: string }; error?: string }> {
+    const client = await pool.connect();
+    try {
+      const query = 'SELECT id, nombre, nit FROM empresas WHERE nit = $1';
+      const result = await client.query(query, [nit]);
+
       if (result.rows.length === 0) {
-        return { success: false, error: 'Documento no encontrado para esta empresa' };
+        return { success: false, error: 'Empresa no encontrada' };
       }
 
-      return { success: true, data: result.rows[0] as Documento };
+      return { success: true, data: result.rows[0] };
     } catch (error) {
       return { success: false, error: (error as Error).message };
     } finally {
