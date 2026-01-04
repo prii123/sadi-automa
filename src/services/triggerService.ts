@@ -163,13 +163,10 @@ export class TriggerService {
       // Iniciar transacción para asegurar integridad
       await client.query('BEGIN');
 
-      // 1. Eliminar notificaciones relacionadas con este trigger
-      await client.query('DELETE FROM notificaciones WHERE trigger_id = $1', [id]);
-
-      // 2. Eliminar ejecuciones del trigger
+      // 1. Eliminar ejecuciones del trigger
       await client.query('DELETE FROM trigger_ejecuciones WHERE trigger_id = $1', [id]);
 
-      // 3. Eliminar el trigger
+      // 2. Eliminar el trigger
       const result = await client.query('DELETE FROM triggers WHERE id = $1 RETURNING id', [id]);
 
       if (result.rowCount === 0) {
