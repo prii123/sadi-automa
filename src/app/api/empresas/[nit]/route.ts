@@ -27,8 +27,33 @@ export async function PUT(
   try {
     const { nit } = await params;
     const body = await request.json();
-    // Implementar actualización
-    return NextResponse.json({ success: true, message: 'Empresa actualizada' });
+
+    // Obtener empresa actual
+    const empresaResult = await EmpresaService.getByNit(nit);
+    if (!empresaResult.success || !empresaResult.data) {
+      return NextResponse.json({ success: false, error: 'Empresa no encontrada' }, { status: 404 });
+    }
+
+    const empresaActual = empresaResult.data;
+
+    // Actualizar campos específicos
+    if (body.certificado) {
+      empresaActual.certificado = { ...empresaActual.certificado, ...body.certificado };
+    }
+    if (body.resolucion) {
+      empresaActual.resolucion = { ...empresaActual.resolucion, ...body.resolucion };
+    }
+    if (body.documento) {
+      empresaActual.documento = { ...empresaActual.documento, ...body.documento };
+    }
+
+    // Actualizar en la base de datos
+    const updateResult = await EmpresaService.update(empresaActual.id!, empresaActual);
+    if (updateResult.success) {
+      return NextResponse.json({ success: true, data: updateResult.data });
+    } else {
+      return NextResponse.json({ success: false, error: updateResult.error }, { status: 400 });
+    }
   } catch (error) {
     return NextResponse.json({ success: false, error: (error as Error).message }, { status: 500 });
   }

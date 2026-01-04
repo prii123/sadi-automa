@@ -1,13 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { NotificacionConEmpresa } from '@/models';
 
 export default function NotificacionesPage() {
   const [notificaciones, setNotificaciones] = useState<NotificacionConEmpresa[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filtro, setFiltro] = useState<'todas' | 'pendientes'>('pendientes');
   const [estadisticas, setEstadisticas] = useState<any>(null);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const filtroParam = searchParams.get('filtro');
+  const tipoParam = searchParams.get('tipo');
+  const filtro = (filtroParam === 'todas' || filtroParam === 'pendientes') ? filtroParam : 'pendientes';
 
   // Cargar notificaciones
   useEffect(() => {
@@ -17,14 +22,40 @@ export default function NotificacionesPage() {
 
   const fetchNotificaciones = async () => {
     try {
-      const url = filtro === 'pendientes'
+      let url = filtro === 'pendientes'
         ? '/api/notificaciones?resueltas=false'
         : '/api/notificaciones';
 
+      // Agregar filtro por tipo si viene desde dashboard
+      if (tipoParam) {
+        const separator = url.includes('?') ? '&' : '?';
+        if (tipoParam === 'proximos_vencer') {
+          // Filtrar notificaciones que contienen "próximo a vencer" o "vence en"
+          url += `${separator}tipo=proximos_vencer`;
+        } else if (tipoParam === 'vencidos') {
+          // Filtrar notificaciones que contienen "vencido"
+          url += `${separator}tipo=vencidos`;
+        }
+      }
+
       const response = await fetch(url);
-      const data = await response.json();
+      let data = await response.json();
+
       if (data.success) {
-        setNotificaciones(data.data);
+        let notificacionesFiltradas = data.data;
+
+        // Aplicar filtro adicional en el frontend si es necesario
+        if (tipoParam === 'proximos_vencer') {
+          notificacionesFiltradas = data.data.filter((n: any) =>
+            n.mensaje.includes('vence en') || n.mensaje.includes('próximo a vencer')
+          );
+        } else if (tipoParam === 'vencidos') {
+          notificacionesFiltradas = data.data.filter((n: any) =>
+            n.mensaje.includes('vencido') || n.mensaje.includes('vencida')
+          );
+        }
+
+        setNotificaciones(notificacionesFiltradas);
       }
     } catch (error) {
       console.error('Error cargando notificaciones:', error);
@@ -36,6 +67,136 @@ export default function NotificacionesPage() {
   const fetchEstadisticas = async () => {
     // Por ahora no implementamos estadísticas detalladas
     // Podríamos crear un endpoint separado para esto
+  };
+
+  const cambiarFiltro = (nuevoFiltro: 'todas' | 'pendientes') => {
+    router.push(`/notificaciones?filtro=${nuevoFiltro}`);
+  };
+
+  const handleMarcarRenovado = async (notificacion: NotificacionConEmpresa) => {
+    if (!notificacion.empresa_nit) return;
+
+    try {
+      // Obtener empresa actual
+      const empresaResponse = await fetch(`/api/empresas/${notificacion.empresa_nit}`);
+      const empresaData = await empresaResponse.json();
+
+      if (!empresaData.success) {
+        alert('Error al obtener datos de la empresa');
+        return;
+      }
+
+      const empresa = empresaData.data;
+      let updateData = {};
+
+      // Determinar qué módulo actualizar basado en el tipo de notificación
+      if (notificacion.tipo === 'certificado') {
+        updateData = {
+          certificado: {
+            ...empresa.certificado,
+            renovado: 1
+          }
+        };
+      } else if (notificacion.tipo === 'resolucion') {
+        updateData = {
+          resolucion: {
+            ...empresa.resolucion,
+            renovado: 1
+          }
+        };
+      } else if (notificacion.tipo === 'documento') {
+        updateData = {
+          documento: {
+            ...empresa.documento,
+            renovado: 1
+          }
+        };
+      }
+
+      // Actualizar empresa
+      const updateResponse = await fetch(`/api/empresas/${notificacion.empresa_nit}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      const updateResult = await updateResponse.json();
+      if (updateResult.success) {
+        // Marcar notificación como resuelta
+        await handleMarcarResuelta(notificacion.id!);
+        alert('Documento marcado como renovado');
+      } else {
+        alert('Error al marcar como renovado: ' + updateResult.error);
+      }
+    } catch (error) {
+      console.error('Error marcando como renovado:', error);
+      alert('Error al marcar como renovado');
+    }
+  };
+
+  const handleMarcarFacturado = async (notificacion: NotificacionConEmpresa) => {
+    if (!notificacion.empresa_nit) return;
+
+    try {
+      // Obtener empresa actual
+      const empresaResponse = await fetch(`/api/empresas/${notificacion.empresa_nit}`);
+      const empresaData = await empresaResponse.json();
+
+      if (!empresaData.success) {
+        alert('Error al obtener datos de la empresa');
+        return;
+      }
+
+      const empresa = empresaData.data;
+      let updateData = {};
+
+      // Determinar qué módulo actualizar basado en el tipo de notificación
+      if (notificacion.tipo === 'certificado') {
+        updateData = {
+          certificado: {
+            ...empresa.certificado,
+            facturado: 1
+          }
+        };
+      } else if (notificacion.tipo === 'resolucion') {
+        updateData = {
+          resolucion: {
+            ...empresa.resolucion,
+            facturado: 1
+          }
+        };
+      } else if (notificacion.tipo === 'documento') {
+        updateData = {
+          documento: {
+            ...empresa.documento,
+            facturado: 1
+          }
+        };
+      }
+
+      // Actualizar empresa
+      const updateResponse = await fetch(`/api/empresas/${notificacion.empresa_nit}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      const updateResult = await updateResponse.json();
+      if (updateResult.success) {
+        // Marcar notificación como resuelta
+        await handleMarcarResuelta(notificacion.id!);
+        alert('Documento marcado como facturado');
+      } else {
+        alert('Error al marcar como facturado: ' + updateResult.error);
+      }
+    } catch (error) {
+      console.error('Error marcando como facturado:', error);
+      alert('Error al marcar como facturado');
+    }
   };
 
   const handleMarcarResuelta = async (id: number) => {
@@ -105,14 +266,26 @@ export default function NotificacionesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Gestión de Notificaciones</h1>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Gestión de Notificaciones</h1>
+          {tipoParam === 'proximos_vencer' && (
+            <p className="text-sm text-gray-600 mt-1">
+              Mostrando notificaciones relacionadas con documentos próximos a vencer (30 días)
+            </p>
+          )}
+          {tipoParam === 'vencidos' && (
+            <p className="text-sm text-gray-600 mt-1">
+              Mostrando notificaciones relacionadas con documentos vencidos
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Filtros */}
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
         <div className="flex space-x-4">
           <button
-            onClick={() => setFiltro('pendientes')}
+            onClick={() => cambiarFiltro('pendientes')}
             className={`px-4 py-2 rounded-md ${
               filtro === 'pendientes'
                 ? 'bg-blue-600 text-white'
@@ -122,7 +295,7 @@ export default function NotificacionesPage() {
             Pendientes
           </button>
           <button
-            onClick={() => setFiltro('todas')}
+            onClick={() => cambiarFiltro('todas')}
             className={`px-4 py-2 rounded-md ${
               filtro === 'todas'
                 ? 'bg-blue-600 text-white'
@@ -155,7 +328,7 @@ export default function NotificacionesPage() {
             <div className="ml-4">
               <h3 className="text-sm font-medium text-gray-900">Críticas</h3>
               <p className="text-2xl font-semibold text-red-600">
-                {notificaciones.filter(n => n.prioridad === 'CRITICA' && n.resuelta === 0).length}
+                {notificaciones.filter(n => n.prioridad === 'CRITICA' && Number(n.resuelta) === 0).length}
               </p>
             </div>
           </div>
@@ -168,7 +341,7 @@ export default function NotificacionesPage() {
             <div className="ml-4">
               <h3 className="text-sm font-medium text-gray-900">Resueltas</h3>
               <p className="text-2xl font-semibold text-green-600">
-                {notificaciones.filter(n => n.resuelta === 1).length}
+                {notificaciones.filter(n => Number(n.resuelta) === 1).length}
               </p>
             </div>
           </div>
@@ -184,8 +357,27 @@ export default function NotificacionesPage() {
         </div>
         <div className="overflow-x-auto">
           {notificaciones.length === 0 ? (
-            <div className="p-6 text-center text-gray-500">
-              No hay notificaciones {filtro === 'pendientes' ? 'pendientes' : ''}.
+            <div className="p-6 text-center">
+              <div className="text-gray-700 mb-2">
+                {tipoParam === 'proximos_vencer' 
+                  ? 'No hay notificaciones específicas para documentos próximos a vencer.'
+                  : tipoParam === 'vencidos'
+                  ? 'No hay notificaciones específicas para documentos vencidos.'
+                  : `No hay notificaciones ${filtro === 'pendientes' ? 'pendientes' : ''}.`
+                }
+              </div>
+              {tipoParam && (
+                <div className="text-sm text-gray-500 mt-2">
+                  Las notificaciones se generan automáticamente cuando el sistema detecta documentos próximos a vencer o vencidos.
+                  <br />
+                  <button
+                    onClick={() => router.push('/notificaciones')}
+                    className="text-blue-600 hover:text-blue-800 underline mt-1"
+                  >
+                    Ver todas las notificaciones
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="divide-y divide-gray-200">
@@ -200,7 +392,7 @@ export default function NotificacionesPage() {
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPrioridadColor(notificacion.prioridad)}`}>
                           {notificacion.prioridad}
                         </span>
-                        {notificacion.resuelta === 1 && (
+                        {Number(notificacion.resuelta) === 1 && (
                           <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
                             Resuelta
                           </span>
@@ -217,13 +409,29 @@ export default function NotificacionesPage() {
                       </div>
                     </div>
                     <div className="flex space-x-2 ml-4">
-                      {notificacion.resuelta === 0 && (
-                        <button
-                          onClick={() => handleMarcarResuelta(notificacion.id!)}
-                          className="bg-green-600 text-white px-3 py-1 rounded-md text-sm hover:bg-green-700"
-                        >
-                          Resolver
-                        </button>
+                      {Number(notificacion.resuelta) === 0 && (
+                        <>
+                          <button
+                            onClick={() => handleMarcarRenovado(notificacion)}
+                            className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700"
+                            title="Marcar como renovado"
+                          >
+                            🔄 Renovado
+                          </button>
+                          <button
+                            onClick={() => handleMarcarFacturado(notificacion)}
+                            className="bg-purple-600 text-white px-3 py-1 rounded-md text-sm hover:bg-purple-700"
+                            title="Marcar como facturado"
+                          >
+                            💰 Facturado
+                          </button>
+                          <button
+                            onClick={() => handleMarcarResuelta(notificacion.id!)}
+                            className="bg-green-600 text-white px-3 py-1 rounded-md text-sm hover:bg-green-700"
+                          >
+                            Resolver
+                          </button>
+                        </>
                       )}
                       <button
                         onClick={() => handleEliminar(notificacion.id!)}

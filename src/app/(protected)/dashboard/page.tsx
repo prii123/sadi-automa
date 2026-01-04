@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 interface EstadisticasModulos {
   totalEmpresas: number;
@@ -29,6 +30,7 @@ interface EstadisticasModulos {
 export default function DashboardHome() {
   const [estadisticas, setEstadisticas] = useState<EstadisticasModulos | null>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   // Cargar estadísticas
   useEffect(() => {
@@ -47,6 +49,21 @@ export default function DashboardHome() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleProximosVencerClick = () => {
+    // Redirigir a la página de notificaciones con filtro de próximos a vencer
+    router.push('/notificaciones?filtro=pendientes&tipo=proximos_vencer');
+  };
+
+  const handleVencidosClick = () => {
+    // Redirigir a la página de notificaciones con filtro de vencidos
+    router.push('/notificaciones?filtro=pendientes&tipo=vencidos');
+  };
+
+  const handleNoEmpresasClick = () => {
+    // Redirigir a la página de empresas para agregar nuevas
+    router.push('/empresas');
   };
 
   if (loading) {
@@ -285,7 +302,10 @@ export default function DashboardHome() {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Alertas</h3>
           <div className="space-y-3">
             {(estadisticas.proximosVencer.certificados + estadisticas.proximosVencer.resoluciones + estadisticas.proximosVencer.documentos) > 0 && (
-              <div className="flex items-center p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+              <div 
+                className="flex items-center p-3 bg-yellow-50 border border-yellow-200 rounded-md cursor-pointer hover:bg-yellow-100 transition-colors"
+                onClick={handleProximosVencerClick}
+              >
                 <span className="text-yellow-600 mr-2">⚠️</span>
                 <div>
                   <p className="text-sm font-medium text-yellow-800">Próximos a vencer (30 días)</p>
@@ -299,7 +319,10 @@ export default function DashboardHome() {
             )}
 
             {(estadisticas.vencidos.certificados + estadisticas.vencidos.resoluciones + estadisticas.vencidos.documentos) > 0 && (
-              <div className="flex items-center p-3 bg-red-50 border border-red-200 rounded-md">
+              <div 
+                className="flex items-center p-3 bg-red-50 border border-red-200 rounded-md cursor-pointer hover:bg-red-100 transition-colors"
+                onClick={handleVencidosClick}
+              >
                 <span className="text-red-600 mr-2">🚨</span>
                 <div>
                   <p className="text-sm font-medium text-red-800">Documentos vencidos</p>
@@ -313,7 +336,10 @@ export default function DashboardHome() {
             )}
 
             {estadisticas.totalEmpresas === 0 && (
-              <div className="flex items-center p-3 bg-blue-50 border border-blue-200 rounded-md">
+              <div 
+                className="flex items-center p-3 bg-blue-50 border border-blue-200 rounded-md cursor-pointer hover:bg-blue-100 transition-colors"
+                onClick={handleNoEmpresasClick}
+              >
                 <span className="text-blue-600 mr-2">ℹ️</span>
                 <div>
                   <p className="text-sm font-medium text-blue-800">No hay empresas registradas</p>

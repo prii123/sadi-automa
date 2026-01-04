@@ -205,12 +205,121 @@ export class EmpresaService {
   }
 
   // Actualizar
-  static async update(id: number, empresa: Partial<Empresa>): Promise<{ success: boolean; error?: string }> {
+  static async update(id: number, empresa: Partial<Empresa>): Promise<{ success: boolean; data?: Empresa; error?: string }> {
+    const client = await pool.connect();
     try {
-      // Implementar actualización
-      return { success: true };
+      // Obtener empresa actual para merge
+      const currentResult = await client.query('SELECT * FROM empresas WHERE id = $1', [id]);
+      if (currentResult.rows.length === 0) {
+        return { success: false, error: 'Empresa no encontrada' };
+      }
+
+      const currentRow = currentResult.rows[0] as EmpresaRow;
+
+      // Preparar valores para actualización
+      const updateQuery = `
+        UPDATE empresas SET
+          nombre = $1,
+          tipo = $2,
+          estado = $3,
+          cert_activo = $4,
+          cert_fecha_inicio = $5,
+          cert_fecha_final = $6,
+          cert_notificacion = $7,
+          cert_renovado = $8,
+          cert_facturado = $9,
+          cert_comentarios = $10,
+          resol_activo = $11,
+          resol_fecha_inicio = $12,
+          resol_fecha_final = $13,
+          resol_notificacion = $14,
+          resol_renovado = $15,
+          resol_facturado = $16,
+          resol_comentarios = $17,
+          doc_activo = $18,
+          doc_fecha_inicio = $19,
+          doc_fecha_final = $20,
+          doc_notificacion = $21,
+          doc_renovado = $22,
+          doc_facturado = $23,
+          doc_comentarios = $24,
+          fecha_actualizacion = NOW()
+        WHERE id = $25
+        RETURNING *
+      `;
+
+      const values = [
+        empresa.nombre || currentRow.nombre,
+        empresa.tipo || currentRow.tipo,
+        empresa.estado || currentRow.estado,
+        empresa.certificado?.activo ?? currentRow.cert_activo,
+        empresa.certificado?.fecha_inicio ?? currentRow.cert_fecha_inicio,
+        empresa.certificado?.fecha_final ?? currentRow.cert_fecha_final,
+        empresa.certificado?.notificacion ?? currentRow.cert_notificacion,
+        empresa.certificado?.renovado ?? currentRow.cert_renovado,
+        empresa.certificado?.facturado ?? currentRow.cert_facturado,
+        empresa.certificado?.comentarios ?? currentRow.cert_comentarios,
+        empresa.resolucion?.activo ?? currentRow.resol_activo,
+        empresa.resolucion?.fecha_inicio ?? currentRow.resol_fecha_inicio,
+        empresa.resolucion?.fecha_final ?? currentRow.resol_fecha_final,
+        empresa.resolucion?.notificacion ?? currentRow.resol_notificacion,
+        empresa.resolucion?.renovado ?? currentRow.resol_renovado,
+        empresa.resolucion?.facturado ?? currentRow.resol_facturado,
+        empresa.resolucion?.comentarios ?? currentRow.resol_comentarios,
+        empresa.documento?.activo ?? currentRow.doc_activo,
+        empresa.documento?.fecha_inicio ?? currentRow.doc_fecha_inicio,
+        empresa.documento?.fecha_final ?? currentRow.doc_fecha_final,
+        empresa.documento?.notificacion ?? currentRow.doc_notificacion,
+        empresa.documento?.renovado ?? currentRow.doc_renovado,
+        empresa.documento?.facturado ?? currentRow.doc_facturado,
+        empresa.documento?.comentarios ?? currentRow.doc_comentarios,
+        id
+      ];
+
+      const result = await client.query(updateQuery, values);
+      const updatedRow = result.rows[0] as EmpresaRow;
+
+      // Convertir a objeto Empresa
+      const updatedEmpresa: Empresa = {
+        id: updatedRow.id,
+        nit: updatedRow.nit,
+        nombre: updatedRow.nombre,
+        tipo: updatedRow.tipo,
+        estado: updatedRow.estado,
+        certificado: {
+          activo: updatedRow.cert_activo,
+          fecha_inicio: updatedRow.cert_fecha_inicio,
+          fecha_final: updatedRow.cert_fecha_final,
+          notificacion: updatedRow.cert_notificacion,
+          renovado: updatedRow.cert_renovado,
+          facturado: updatedRow.cert_facturado,
+          comentarios: updatedRow.cert_comentarios,
+        },
+        resolucion: {
+          activo: updatedRow.resol_activo,
+          fecha_inicio: updatedRow.resol_fecha_inicio,
+          fecha_final: updatedRow.resol_fecha_final,
+          notificacion: updatedRow.resol_notificacion,
+          renovado: updatedRow.resol_renovado,
+          facturado: updatedRow.resol_facturado,
+          comentarios: updatedRow.resol_comentarios,
+        },
+        documento: {
+          activo: updatedRow.doc_activo,
+          fecha_inicio: updatedRow.doc_fecha_inicio,
+          fecha_final: updatedRow.doc_fecha_final,
+          notificacion: updatedRow.doc_notificacion,
+          renovado: updatedRow.doc_renovado,
+          facturado: updatedRow.doc_facturado,
+          comentarios: updatedRow.doc_comentarios,
+        },
+      };
+
+      return { success: true, data: updatedEmpresa };
     } catch (error) {
       return { success: false, error: (error as Error).message };
+    } finally {
+      client.release();
     }
   }
 
