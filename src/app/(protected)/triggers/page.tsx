@@ -23,6 +23,26 @@ export default function TriggersPage() {
     activo: 1
   });
 
+  // Función helper para calcular tiempo restante
+  const calcularTiempoRestante = (proximaEjecucion: string) => {
+    const ahora = new Date();
+    const proxima = new Date(proximaEjecucion);
+    const diffMs = proxima.getTime() - ahora.getTime();
+    const diffMinutos = Math.floor(diffMs / (1000 * 60));
+    const diffHoras = Math.floor(diffMinutos / 60);
+    const diffDias = Math.floor(diffHoras / 24);
+
+    if (diffDias > 0) {
+      return `En ${diffDias} día${diffDias !== 1 ? 's' : ''}`;
+    } else if (diffHoras > 0) {
+      return `En ${diffHoras} hora${diffHoras !== 1 ? 's' : ''}`;
+    } else if (diffMinutos > 0) {
+      return `En ${diffMinutos} minuto${diffMinutos !== 1 ? 's' : ''}`;
+    } else {
+      return 'Próximamente';
+    }
+  };
+
   // Cargar triggers
   useEffect(() => {
     fetchTriggers();
@@ -392,6 +412,9 @@ export default function TriggersPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                     Última Ejecución
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Próxima Ejecución
+                  </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
                     Acciones
                   </th>
@@ -420,6 +443,23 @@ export default function TriggersPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                       {trigger.ultima_ejecucion ? new Date(trigger.ultima_ejecucion).toLocaleDateString() : 'Nunca'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                      {trigger.proxima_ejecucion ? (
+                        <div>
+                          <div className="font-medium">
+                            {new Date(trigger.proxima_ejecucion).toLocaleDateString()}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {new Date(trigger.proxima_ejecucion).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          </div>
+                          <div className="text-xs text-blue-600 font-medium">
+                            {calcularTiempoRestante(trigger.proxima_ejecucion)}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 italic">No programada</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
                       <button
