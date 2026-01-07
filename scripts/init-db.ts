@@ -105,6 +105,29 @@ async function initDatabase() {
       )
     `);
 
+    // Tabla eventos_tributarios
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS eventos_tributarios (
+        id SERIAL PRIMARY KEY,
+        titulo TEXT NOT NULL,
+        descripcion TEXT,
+        tipo TEXT NOT NULL,
+        fecha_vencimiento TIMESTAMP NOT NULL,
+        empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+        estado TEXT DEFAULT 'pendiente',
+        prioridad TEXT DEFAULT 'media',
+        monto DECIMAL(15,2),
+        observaciones TEXT,
+        fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        fecha_actualizacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Índices para eventos_tributarios
+    await client.query('CREATE INDEX IF NOT EXISTS idx_eventos_tributarios_empresa_id ON eventos_tributarios(empresa_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_eventos_tributarios_fecha_vencimiento ON eventos_tributarios(fecha_vencimiento)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_eventos_tributarios_estado ON eventos_tributarios(estado)');
+
     console.log('Base de datos PostgreSQL inicializada correctamente.');
 
     // Crear usuario administrador por defecto

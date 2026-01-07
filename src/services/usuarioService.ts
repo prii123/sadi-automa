@@ -4,7 +4,7 @@ import { Usuario } from '../models';
 
 export class UsuarioService {
   // Crear usuario
-  static async create(userData: { username: string; password: string; nombre: string; email: string; rol?: string }): Promise<{ success: boolean; data?: Usuario; error?: string }> {
+  static async create(userData: { username: string; password: string; nombre: string; email: string; role_id?: number }): Promise<{ success: boolean; data?: Usuario; error?: string }> {
     const client = await pool.connect();
     try {
       // Verificar si username ya existe
@@ -15,10 +15,10 @@ export class UsuarioService {
 
       const hashedPassword = await bcrypt.hash(userData.password, 10);
       const result = await client.query(`
-        INSERT INTO usuarios (username, password_hash, nombre, email, rol, activo, fecha_creacion, fecha_actualizacion)
+        INSERT INTO usuarios (username, password_hash, nombre, email, role_id, activo, fecha_creacion, fecha_actualizacion)
         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        RETURNING id, username, nombre, email, rol, activo, fecha_creacion, fecha_actualizacion
-      `, [userData.username, hashedPassword, userData.nombre, userData.email, userData.rol || 'usuario', 1]);
+        RETURNING id, username, nombre, email, role_id, activo, fecha_creacion, fecha_actualizacion
+      `, [userData.username, hashedPassword, userData.nombre, userData.email, userData.role_id || 5, 1]);
 
       const user = result.rows[0];
       return { success: true, data: user };
@@ -34,7 +34,7 @@ export class UsuarioService {
     const client = await pool.connect();
     try {
       const result = await client.query(`
-        SELECT id, username, nombre, email, rol, activo, fecha_creacion, fecha_actualizacion, ultimo_acceso
+        SELECT id, username, nombre, email, role_id, activo, fecha_creacion, fecha_actualizacion, ultimo_acceso
         FROM usuarios ORDER BY nombre
       `);
 
@@ -51,7 +51,7 @@ export class UsuarioService {
     const client = await pool.connect();
     try {
       const result = await client.query(`
-        SELECT id, username, nombre, email, rol, activo, fecha_creacion, fecha_actualizacion, ultimo_acceso
+        SELECT id, username, nombre, email, role_id, activo, fecha_creacion, fecha_actualizacion, ultimo_acceso
         FROM usuarios WHERE id = $1
       `, [id]);
 
@@ -85,9 +85,9 @@ export class UsuarioService {
         values.push(userData.email);
         paramCount++;
       }
-      if (userData.rol !== undefined) {
-        fields.push(`rol = $${paramCount}`);
-        values.push(userData.rol);
+      if (userData.role_id !== undefined) {
+        fields.push(`role_id = $${paramCount}`);
+        values.push(userData.role_id);
         paramCount++;
       }
       if (userData.activo !== undefined) {

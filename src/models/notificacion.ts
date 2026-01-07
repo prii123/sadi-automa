@@ -16,4 +16,6 @@ export interface Notificacion {
 export interface NotificacionConEmpresa extends Notificacion {
   empresa_nombre?: string;
   empresa_nit?: string;
+  renovado?: number;
+  facturado?: number;
 }

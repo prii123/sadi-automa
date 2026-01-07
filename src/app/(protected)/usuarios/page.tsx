@@ -3,8 +3,15 @@
 import { useState, useEffect } from 'react';
 import { Usuario } from '@/models';
 
+interface Role {
+  id: number;
+  nombre: string;
+  descripcion?: string;
+}
+
 export default function UsuariosPage() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingUsuario, setEditingUsuario] = useState<Usuario | null>(null);
@@ -13,12 +20,13 @@ export default function UsuariosPage() {
     password: '',
     nombre: '',
     email: '',
-    rol: 'usuario'
+    role_id: 5 // ID por defecto para 'usuario'
   });
 
-  // Cargar usuarios
+  // Cargar usuarios y roles
   useEffect(() => {
     fetchUsuarios();
+    fetchRoles();
   }, []);
 
   const fetchUsuarios = async () => {
@@ -35,6 +43,22 @@ export default function UsuariosPage() {
     }
   };
 
+  const fetchRoles = async () => {
+    try {
+      const response = await fetch('/api/roles');
+      const data = await response.json();
+      setRoles(data.roles || []);
+    } catch (error) {
+      console.error('Error cargando roles:', error);
+    }
+  };
+
+  const getRoleName = (roleId?: number): string => {
+    if (!roleId) return 'Sin rol';
+    const role = roles.find(r => r.id === roleId);
+    return role ? role.nombre : 'Desconocido';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -49,7 +73,7 @@ export default function UsuariosPage() {
 
       const data = await response.json();
       if (data.success) {
-        setFormData({ username: '', password: '', nombre: '', email: '', rol: 'usuario' });
+        setFormData({ username: '', password: '', nombre: '', email: '', role_id: 5 });
         setShowForm(false);
         setEditingUsuario(null);
         fetchUsuarios();
@@ -68,7 +92,7 @@ export default function UsuariosPage() {
       password: '', // No mostrar contraseña existente
       nombre: usuario.nombre,
       email: usuario.email,
-      rol: usuario.rol
+      role_id: usuario.role_id || 5
     });
     setShowForm(true);
   };
@@ -93,7 +117,7 @@ export default function UsuariosPage() {
   };
 
   const resetForm = () => {
-    setFormData({ username: '', password: '', nombre: '', email: '', rol: 'usuario' });
+    setFormData({ username: '', password: '', nombre: '', email: '', role_id: 5 });
     setEditingUsuario(null);
     setShowForm(false);
   };
@@ -166,12 +190,16 @@ export default function UsuariosPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Rol</label>
                 <select
-                  value={formData.rol}
-                  onChange={(e) => setFormData({...formData, rol: e.target.value})}
+                  value={formData.role_id}
+                  onChange={(e) => setFormData({...formData, role_id: parseInt(e.target.value)})}
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
                 >
-                  <option value="usuario">Usuario</option>
-                  <option value="admin">Administrador</option>
+                  {roles.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {role.nombre} {role.descripcion && `- ${role.descripcion}`}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="flex space-x-2">
@@ -245,11 +273,17 @@ export default function UsuariosPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        usuario.rol === 'admin'
+                        getRoleName(usuario.role_id) === 'super_admin'
+                          ? 'bg-red-100 text-red-800'
+                          : getRoleName(usuario.role_id) === 'admin'
                           ? 'bg-purple-100 text-purple-800'
-                          : 'bg-blue-100 text-blue-800'
+                          : getRoleName(usuario.role_id) === 'contador'
+                          ? 'bg-blue-100 text-blue-800'
+                          : getRoleName(usuario.role_id) === 'auditor'
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : 'bg-gray-100 text-gray-800'
                       }`}>
-                        {usuario.rol}
+                        {getRoleName(usuario.role_id)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

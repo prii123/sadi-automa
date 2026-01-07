@@ -47,11 +47,13 @@ export class NotificacionService {
           0 as resuelta,
           c.empresa_id,
           e.nombre as empresa_nombre,
-          e.nit as empresa_nit
+          e.nit as empresa_nit,
+          c.renovado,
+          c.facturado
         FROM certificados c
         JOIN empresas e ON c.empresa_id = e.id
         WHERE c.activo = 1
-        AND (c.renovado = 0 OR c.facturado = 0)
+        AND (c.renovado = 0 OR (c.renovado = 1 AND c.facturado = 0))
         AND c.fecha_final::date <= CURRENT_DATE + INTERVAL '30 days'
       `;
 
@@ -87,11 +89,13 @@ export class NotificacionService {
           0 as resuelta,
           r.empresa_id,
           e.nombre as empresa_nombre,
-          e.nit as empresa_nit
+          e.nit as empresa_nit,
+          r.renovado,
+          r.facturado
         FROM resoluciones r
         JOIN empresas e ON r.empresa_id = e.id
         WHERE r.activo = 1
-        AND (r.renovado = 0 OR r.facturado = 0)
+        AND (r.renovado = 0 OR (r.renovado = 1 AND r.facturado = 0))
         AND r.fecha_final::date <= CURRENT_DATE + INTERVAL '30 days'
       `;
 
@@ -127,11 +131,13 @@ export class NotificacionService {
           0 as resuelta,
           d.empresa_id,
           e.nombre as empresa_nombre,
-          e.nit as empresa_nit
+          e.nit as empresa_nit,
+          d.renovado,
+          d.facturado
         FROM documentos d
         JOIN empresas e ON d.empresa_id = e.id
         WHERE d.activo = 1
-        AND (d.renovado = 0 OR d.facturado = 0)
+        AND (d.renovado = 0 OR (d.renovado = 1 AND d.facturado = 0))
         AND d.fecha_final::date <= CURRENT_DATE + INTERVAL '30 days'
       `;
 

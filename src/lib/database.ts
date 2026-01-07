@@ -25,4 +25,6 @@ pool.on('error', (err) => {
   console.error('Error en la conexión a PostgreSQL:', err);
 });
 
+export const query = (text: string, params?: any[]) => pool.query(text, params);
+
 export default pool;

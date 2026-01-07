@@ -65,6 +65,50 @@ export default function NotificacionesPage() {
     router.push(`/notificaciones?filtro=${nuevoFiltro}`);
   };
 
+  const marcarComoRenovado = async (notificacion: NotificacionConEmpresa) => {
+    try {
+      const response = await fetch(`/api/notificaciones/${notificacion.tipo}/${notificacion.id}/renovar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        // Recargar notificaciones
+        fetchNotificaciones();
+        fetchEstadisticas();
+        alert('Documento marcado como renovado exitosamente');
+      } else {
+        alert('Error al marcar como renovado: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error al procesar la solicitud');
+    }
+  };
+
+  const marcarComoFacturado = async (notificacion: NotificacionConEmpresa) => {
+    try {
+      const response = await fetch(`/api/notificaciones/${notificacion.tipo}/${notificacion.id}/facturar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        // Recargar notificaciones
+        fetchNotificaciones();
+        fetchEstadisticas();
+        alert('Documento marcado como facturado exitosamente');
+      } else {
+        alert('Error al marcar como facturado: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error al procesar la solicitud');
+    }
+  };
+
   const getPrioridadColor = (prioridad: string) => {
     switch (prioridad.toUpperCase()) {
       case 'CRITICA':
@@ -240,6 +284,27 @@ export default function NotificacionesPage() {
                           {new Date(notificacion.fecha_creacion).toLocaleString()}
                         </span>
                       </div>
+                    </div>
+                    {/* Botones de acción */}
+                    <div className="flex flex-col space-y-2 ml-4">
+                      {Number(notificacion.renovado) === 0 && (
+                        <button
+                          onClick={() => marcarComoRenovado(notificacion)}
+                          className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                          title="Marcar documento como renovado"
+                        >
+                          ✅ Renovado
+                        </button>
+                      )}
+                      {Number(notificacion.renovado) === 1 && Number(notificacion.facturado) === 0 && (
+                        <button
+                          onClick={() => marcarComoFacturado(notificacion)}
+                          className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                          title="Marcar documento como facturado"
+                        >
+                          💰 Facturado
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

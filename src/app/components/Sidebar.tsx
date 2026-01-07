@@ -1,50 +1,82 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+
+interface MenuItem {
+  name: string;
+  href: string;
+  icon: string;
+  modulo: string; // Nombre del módulo en BD
+  accion: string; // Acción requerida ('ver', 'crear', etc.)
+}
 
 interface SidebarProps {
   user: {
     nombre: string;
     rol: string;
+    role_id?: number;
   } | null;
   onLogout: () => void;
 }
 
 export default function Sidebar({ user, onLogout }: SidebarProps) {
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
   const pathname = usePathname();
   const router = useRouter();
 
-  const menuItems = [
-    {
-      name: 'Dashboard',
-      href: '/dashboard',
-      icon: '📊'
-    },
-    {
-      name: 'Empresas',
-      href: '/empresas',
-      icon: '🏢'
-    },
-    {
-      name: 'Triggers',
-      href: '/triggers',
-      icon: '⚡'
-    },
-    {
-      name: 'Notificaciones',
-      href: '/notificaciones',
-      icon: '🔔'
-    },
-    {
-      name: 'Usuarios',
-      href: '/usuarios',
-      icon: '👥',
-      adminOnly: true
+  useEffect(() => {
+    if (user?.role_id) {
+      loadMenuItems();
+    } else {
+      setMenuItems([]);
+      setLoading(false);
     }
-  ];
+  }, [user]);
+
+  const loadMenuItems = async () => {
+    if (!user?.role_id) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Obtener módulos accesibles desde la API
+      const response = await fetch('/api/modulos');
+      if (!response.ok) {
+        throw new Error('Error al obtener módulos');
+      }
+
+      const menuItemsData = await response.json();
+
+      setMenuItems(menuItemsData);
+    } catch (error) {
+      console.error('Error cargando menú dinámico:', error);
+      // Fallback: menú vacío
+      setMenuItems([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getIconForModulo = (moduloNombre: string): string => {
+    const icons: { [key: string]: string } = {
+      'Dashboard': '📊',
+      'Estadísticas': '📊',
+      'Empresas': '🏢',
+      'Notificaciones': '🔔',
+      'Triggers': '⚡',
+      'Eventos Tributarios': '📅',
+      'Usuarios': '👥',
+      'Roles': '🔐'
+    };
+    return icons[moduloNombre] || '📄';
+  };
 
   const handleLogout = async () => {
     try {
@@ -55,6 +87,16 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
       console.error('Error al cerrar sesión:', error);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="fixed inset-y-0 left-0 z-40 w-64 bg-gray-800 text-white">
+        <div className="flex items-center justify-center h-16 bg-gray-900">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -99,9 +141,23 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
 
           {/* Navigation */}
           <nav className="flex-1 px-4 py-4 space-y-2">
-            {menuItems.map((item) => {
-              if (item.adminOnly && user?.rol !== 'admin') return null;
+            {/* Home - siempre visible */}
+            <Link
+              href="/"
+              className={`
+                flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors
+                ${pathname === '/'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                }
+              `}
+              onClick={() => setIsOpen(false)}
+            >
+              <span className="mr-3">🏠</span>
+              Home
+            </Link>
 
+            {menuItems.map((item) => {
               const isActive = pathname === item.href;
               return (
                 <Link
@@ -124,7 +180,7 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
           </nav>
 
           {/* Logout */}
-          <div className="px-4 py-4 border-t border-gray-700">
+          <div className="p-4 border-t border-gray-700">
             <button
               onClick={handleLogout}
               className="flex items-center w-full px-4 py-2 text-sm font-medium text-gray-300 rounded-md hover:bg-gray-700 hover:text-white transition-colors"
@@ -135,14 +191,6 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
           </div>
         </div>
       </div>
-
-      {/* Overlay for mobile */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-black bg-opacity-50 lg:hidden"
-          onClick={() => setIsOpen(false)}
-        />
-      )}
     </>
   );
 }

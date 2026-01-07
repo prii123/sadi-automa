@@ -27,7 +27,7 @@ interface EstadisticasModulos {
   };
 }
 
-export default function DashboardHome() {
+export default function EstadisticasHome() {
   const [estadisticas, setEstadisticas] = useState<EstadisticasModulos | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();

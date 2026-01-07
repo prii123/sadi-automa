@@ -203,7 +203,13 @@ export class SchedulerService {
       try {
         // Obtener las notificaciones actuales
         const notifsResult = await NotificacionService.getAll();
-        notificaciones = notifsResult.success && notifsResult.data ? notifsResult.data : [];
+        let notificaciones = notifsResult.success && notifsResult.data ? notifsResult.data : [];
+
+        // Filtrar notificaciones según las prioridades del trigger
+        const prioridadesTrigger = trigger.prioridades.split(',').map(p => p.trim().toUpperCase());
+        if (!prioridadesTrigger.includes('TODAS')) {
+          notificaciones = notificaciones.filter(n => prioridadesTrigger.includes(n.prioridad.toUpperCase()));
+        }
 
         await this.enviarCorreoTrigger(trigger, empresasFiltradas, notificaciones);
         correosEnviados++;
@@ -397,10 +403,6 @@ export class SchedulerService {
             <div style="flex: 1; min-width: 200px; background-color: #fef3c7; padding: 15px; border-radius: 8px; border-left: 4px solid #d97706;">
               <h3 style="color: #d97706; margin: 0 0 10px 0; font-size: 16px;">📋 Medias</h3>
               <p style="color: #d97706; margin: 0; font-size: 24px; font-weight: bold;">${porPrioridad.MEDIA.length}</p>
-            </div>
-            <div style="flex: 1; min-width: 200px; background-color: #f0fdf4; padding: 15px; border-radius: 8px; border-left: 4px solid #16a34a;">
-              <h3 style="color: #16a34a; margin: 0 0 10px 0; font-size: 16px;">ℹ️ Bajas</h3>
-              <p style="color: #16a34a; margin: 0; font-size: 24px; font-weight: bold;">${porPrioridad.BAJA.length}</p>
             </div>
           </div>
 

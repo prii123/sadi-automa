@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Sidebar from '../components/Sidebar';
 import { AuthUser } from '@/services/authService';
+import { useAccessControl } from '@/hooks/useAccessControl';
 
 export default function ProtectedLayout({
   children,
@@ -12,27 +13,62 @@ export default function ProtectedLayout({
 }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hasAccess, setHasAccess] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const { redirectToAccessDenied } = useAccessControl();
 
   useEffect(() => {
-    checkAuth();
-  }, []);
+    checkAuthAndAccess();
+  }, [pathname]);
 
-  const checkAuth = async () => {
+  const checkAuthAndAccess = async () => {
     try {
-      const response = await fetch('/api/auth/me');
-      const data = await response.json();
+      // Verificar autenticación y permisos en una sola llamada
+      const accessResponse = await fetch(`/api/check-access?pathname=${encodeURIComponent(pathname)}`);
+      const accessData = await accessResponse.json();
 
-      if (data.success) {
-        setUser(data.user);
+      if (!accessData.success) {
+        if (accessData.message === 'No autenticado') {
+          router.push('/login');
+        } else {
+          redirectToAccessDenied(
+            'Error de Acceso',
+            'Ocurrió un error al verificar tus permisos',
+            'accessible'
+          );
+        }
+        return;
+      }
+
+      // Si la API dice que no tiene acceso
+      if (!accessData.hasAccess) {
+        redirectToAccessDenied(
+          'Acceso Denegado',
+          `No tienes permisos para acceder a ${accessData.module || 'esta sección'}`,
+          'accessible'
+        );
+        return;
+      }
+
+      // Si tiene acceso, obtener datos del usuario para el sidebar
+      const authResponse = await fetch('/api/auth/me');
+      const authData = await authResponse.json();
+
+      if (authData.success) {
+        setUser(authData.user);
+        setHasAccess(true);
       } else {
-        setUser(null);
         router.push('/login');
       }
+
     } catch (error) {
-      setUser(null);
-      router.push('/login');
+      console.error('Error verificando acceso:', error);
+      redirectToAccessDenied(
+        'Error de Acceso',
+        'Ocurrió un error al verificar tus permisos',
+        'accessible'
+      );
     } finally {
       setLoading(false);
     }
@@ -42,7 +78,7 @@ export default function ProtectedLayout({
     setUser(null);
   };
 
-  // Mostrar loading mientras se verifica la autenticación
+  // Mostrar loading mientras se verifica la autenticación y permisos
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -53,6 +89,11 @@ export default function ProtectedLayout({
 
   // Si no hay usuario autenticado, no renderizar nada (el useEffect redirigirá)
   if (!user) {
+    return null;
+  }
+
+  // Si no tiene acceso, no renderizar nada (la redirección ya se manejó)
+  if (!hasAccess) {
     return null;
   }
 
