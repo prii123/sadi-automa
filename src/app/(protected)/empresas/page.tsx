@@ -10,6 +10,7 @@ export default function EmpresasPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingEmpresa, setEditingEmpresa] = useState<Empresa | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
     nit: '',
     nombre: '',
@@ -39,12 +40,24 @@ export default function EmpresasPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const empresa: Empresa = {
-        ...formData,
-        certificado: { activo: 0, renovado: 0, facturado: 0 },
-        resolucion: { activo: 0, renovado: 0, facturado: 0 },
-        documento: { activo: 0, renovado: 0, facturado: 0 }
-      };
+      let dataToSend: any;
+
+      if (editingEmpresa) {
+        // Para edición, solo enviar los campos básicos que se pueden editar
+        dataToSend = {
+          nombre: formData.nombre,
+          tipo: formData.tipo,
+          estado: formData.estado
+        };
+      } else {
+        // Para creación, enviar objeto Empresa completo
+        dataToSend = {
+          ...formData,
+          certificado: { activo: 0, renovado: 0, facturado: 0 },
+          resolucion: { activo: 0, renovado: 0, facturado: 0 },
+          documento: { activo: 0, renovado: 0, facturado: 0 }
+        };
+      }
 
       const url = editingEmpresa ? `/api/empresas/${editingEmpresa.nit}` : '/api/empresas';
       const method = editingEmpresa ? 'PUT' : 'POST';
@@ -52,7 +65,7 @@ export default function EmpresasPage() {
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(empresa)
+        body: JSON.stringify(dataToSend)
       });
 
       const data = await response.json();
@@ -105,6 +118,19 @@ export default function EmpresasPage() {
     setShowForm(false);
   };
 
+  // Filtrar empresas basado en el término de búsqueda
+  const filteredEmpresas = empresas.filter((empresa) => {
+    if (!searchTerm) return true;
+    
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      empresa.nit.toLowerCase().includes(searchLower) ||
+      empresa.nombre.toLowerCase().includes(searchLower) ||
+      empresa.tipo.toLowerCase().includes(searchLower) ||
+      empresa.estado.toLowerCase().includes(searchLower)
+    );
+  });
+
   if (loading) return <div className="flex items-center justify-center h-full">Cargando...</div>;
 
   return (
@@ -117,6 +143,40 @@ export default function EmpresasPage() {
         >
           Nueva Empresa
         </button>
+      </div>
+
+      {/* Campo de búsqueda */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div className="flex items-center space-x-4">
+          <div className="flex-1">
+            <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">
+              Buscar Empresas
+            </label>
+            <input
+              type="text"
+              id="search"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar por NIT, nombre, tipo o estado..."
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+            />
+          </div>
+          {searchTerm && (
+            <div className="flex items-end">
+              <button
+                onClick={() => setSearchTerm('')}
+                className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Limpiar
+              </button>
+            </div>
+          )}
+        </div>
+        {searchTerm && (
+          <div className="mt-2 text-sm text-gray-600">
+            {filteredEmpresas.length} empresa{filteredEmpresas.length !== 1 ? 's' : ''} encontrada{filteredEmpresas.length !== 1 ? 's' : ''}
+          </div>
+        )}
       </div>
 
       {/* Formulario modal */}
@@ -196,9 +256,12 @@ export default function EmpresasPage() {
           <h2 className="text-xl font-semibold text-gray-900">Empresas Registradas</h2>
         </div>
         <div className="overflow-x-auto">
-          {empresas.length === 0 ? (
+          {filteredEmpresas.length === 0 ? (
             <div className="p-6 text-center text-gray-500">
-              No hay empresas registradas.
+              {searchTerm 
+                ? `No se encontraron empresas que coincidan con "${searchTerm}"`
+                : 'No hay empresas registradas.'
+              }
             </div>
           ) : (
             <table className="min-w-full divide-y divide-gray-200">
@@ -222,7 +285,7 @@ export default function EmpresasPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {empresas.map((empresa) => (
+                {filteredEmpresas.map((empresa) => (
                   <tr key={empresa.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {empresa.nit}

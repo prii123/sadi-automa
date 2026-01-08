@@ -155,33 +155,6 @@ export default function NotificacionesPage() {
         </div>
       </div>
 
-      {/* Filtros */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-        <div className="flex space-x-4 items-center">
-          <div className="flex space-x-4">
-            <button
-              onClick={() => cambiarFiltro('pendientes')}
-              className={`px-4 py-2 rounded-md ${
-                filtro === 'pendientes'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              Pendientes
-            </button>
-            <button
-              onClick={() => cambiarFiltro('todas')}
-              className={`px-4 py-2 rounded-md ${
-                filtro === 'todas'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              Todas
-            </button>
-          </div>
-        </div>
-      </div>
 
       {/* Estadísticas rápidas */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -36,14 +36,19 @@ export async function PUT(
 
     const empresaActual = empresaResult.data;
 
-    // Actualizar campos específicos
-    if (body.certificado) {
+    // Actualizar campos básicos de la empresa
+    if (body.nombre !== undefined) empresaActual.nombre = body.nombre;
+    if (body.tipo !== undefined) empresaActual.tipo = body.tipo;
+    if (body.estado !== undefined) empresaActual.estado = body.estado;
+
+    // Actualizar campos específicos de módulos solo si vienen en el body
+    if (body.certificado !== undefined) {
       empresaActual.certificado = { ...empresaActual.certificado, ...body.certificado };
     }
-    if (body.resolucion) {
+    if (body.resolucion !== undefined) {
       empresaActual.resolucion = { ...empresaActual.resolucion, ...body.resolucion };
     }
-    if (body.documento) {
+    if (body.documento !== undefined) {
       empresaActual.documento = { ...empresaActual.documento, ...body.documento };
     }
 
