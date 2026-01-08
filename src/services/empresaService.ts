@@ -186,42 +186,48 @@ export class EmpresaService {
       const empresasResult = await client.query('SELECT COUNT(*) as total, COUNT(CASE WHEN estado = \'activo\' THEN 1 END) as activas FROM empresas');
       const empresasStats = empresasResult.rows[0];
 
-      // Estadísticas de certificados
+      // Estadísticas de certificados (solo de empresas activas)
       const certResult = await client.query(`
         SELECT
           COUNT(*) as total,
-          COUNT(CASE WHEN activo = 1 THEN 1 END) as activos,
-          COUNT(CASE WHEN renovado = 1 THEN 1 END) as renovados,
-          COUNT(CASE WHEN facturado = 1 THEN 1 END) as facturados,
-          COUNT(CASE WHEN fecha_final >= CURRENT_DATE AND fecha_final <= CURRENT_DATE + INTERVAL '30 days' AND activo = 1 AND (renovado = 0 OR facturado = 0) THEN 1 END) as proximos_vencer,
-          COUNT(CASE WHEN fecha_final < CURRENT_DATE AND activo = 1 AND (renovado = 0 OR facturado = 0) THEN 1 END) as vencidos
-        FROM certificados
+          COUNT(CASE WHEN c.activo = 1 THEN 1 END) as activos,
+          COUNT(CASE WHEN c.renovado = 1 THEN 1 END) as renovados,
+          COUNT(CASE WHEN c.facturado = 1 THEN 1 END) as facturados,
+          COUNT(CASE WHEN c.fecha_final >= CURRENT_DATE AND c.fecha_final <= CURRENT_DATE + INTERVAL '30 days' AND c.activo = 1 AND (c.renovado = 0 OR c.facturado = 0) THEN 1 END) as proximos_vencer,
+          COUNT(CASE WHEN c.fecha_final < CURRENT_DATE AND c.activo = 1 AND (c.renovado = 0 OR c.facturado = 0) THEN 1 END) as vencidos
+        FROM certificados c
+        JOIN empresas e ON c.empresa_id = e.id
+        WHERE e.estado = 'activo'
       `);
       const certStats = certResult.rows[0];
 
-      // Estadísticas de resoluciones
+      // Estadísticas de resoluciones (solo de empresas activas)
       const resolResult = await client.query(`
         SELECT
           COUNT(*) as total,
-          COUNT(CASE WHEN activo = 1 THEN 1 END) as activos,
-          COUNT(CASE WHEN renovado = 1 THEN 1 END) as renovados,
-          COUNT(CASE WHEN facturado = 1 THEN 1 END) as facturados,
-          COUNT(CASE WHEN fecha_final >= CURRENT_DATE AND fecha_final <= CURRENT_DATE + INTERVAL '30 days' AND activo = 1 AND (renovado = 0 OR facturado = 0) THEN 1 END) as proximos_vencer,
-          COUNT(CASE WHEN fecha_final < CURRENT_DATE AND activo = 1 AND (renovado = 0 OR facturado = 0) THEN 1 END) as vencidos
-        FROM resoluciones
+          COUNT(CASE WHEN r.activo = 1 THEN 1 END) as activos,
+          COUNT(CASE WHEN r.renovado = 1 THEN 1 END) as renovados,
+          COUNT(CASE WHEN r.facturado = 1 THEN 1 END) as facturados,
+          COUNT(CASE WHEN r.fecha_final >= CURRENT_DATE AND r.fecha_final <= CURRENT_DATE + INTERVAL '30 days' AND r.activo = 1 AND (r.renovado = 0 OR r.facturado = 0) THEN 1 END) as proximos_vencer,
+          COUNT(CASE WHEN r.fecha_final < CURRENT_DATE AND r.activo = 1 AND (r.renovado = 0 OR r.facturado = 0) THEN 1 END) as vencidos
+        FROM resoluciones r
+        JOIN empresas e ON r.empresa_id = e.id
+        WHERE e.estado = 'activo'
       `);
       const resolStats = resolResult.rows[0];
 
-      // Estadísticas de documentos
+      // Estadísticas de documentos (solo de empresas activas)
       const docResult = await client.query(`
         SELECT
           COUNT(*) as total,
-          COUNT(CASE WHEN activo = 1 THEN 1 END) as activos,
-          COUNT(CASE WHEN renovado = 1 THEN 1 END) as renovados,
-          COUNT(CASE WHEN facturado = 1 THEN 1 END) as facturados,
-          COUNT(CASE WHEN fecha_final >= CURRENT_DATE AND fecha_final <= CURRENT_DATE + INTERVAL '30 days' AND activo = 1 AND (renovado = 0 OR facturado = 0) THEN 1 END) as proximos_vencer,
-          COUNT(CASE WHEN fecha_final < CURRENT_DATE AND activo = 1 AND (renovado = 0 OR facturado = 0) THEN 1 END) as vencidos
-        FROM documentos
+          COUNT(CASE WHEN d.activo = 1 THEN 1 END) as activos,
+          COUNT(CASE WHEN d.renovado = 1 THEN 1 END) as renovados,
+          COUNT(CASE WHEN d.facturado = 1 THEN 1 END) as facturados,
+          COUNT(CASE WHEN d.fecha_final >= CURRENT_DATE AND d.fecha_final <= CURRENT_DATE + INTERVAL '30 days' AND d.activo = 1 AND (d.renovado = 0 OR d.facturado = 0) THEN 1 END) as proximos_vencer,
+          COUNT(CASE WHEN d.fecha_final < CURRENT_DATE AND d.activo = 1 AND (d.renovado = 0 OR d.facturado = 0) THEN 1 END) as vencidos
+        FROM documentos d
+        JOIN empresas e ON d.empresa_id = e.id
+        WHERE e.estado = 'activo'
       `);
       const docStats = docResult.rows[0];
 
@@ -260,6 +266,83 @@ export class EmpresaService {
       };
 
       return { success: true, data: estadisticas };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    } finally {
+      client.release();
+    }
+  }
+
+  // Obtener datos para exportación Excel
+  static async getExportData(): Promise<{
+    success: boolean;
+    data?: {
+      empresas: any[];
+      certificados: any[];
+      resoluciones: any[];
+      documentos: any[];
+    };
+    error?: string;
+  }> {
+    const client = await pool.connect();
+    try {
+      // Obtener todas las empresas
+      const empresasQuery = `
+        SELECT id, nit, nombre, tipo, estado, fecha_creacion, fecha_actualizacion
+        FROM empresas
+        ORDER BY nombre
+      `;
+      const empresasResult = await client.query(empresasQuery);
+      const empresas = empresasResult.rows;
+
+      // Obtener todos los certificados con información de empresa
+      const certificadosQuery = `
+        SELECT
+          c.*,
+          e.nombre as empresa_nombre,
+          e.nit as empresa_nit
+        FROM certificados c
+        JOIN empresas e ON c.empresa_id = e.id
+        ORDER BY e.nombre, c.fecha_inicio DESC
+      `;
+      const certificadosResult = await client.query(certificadosQuery);
+      const certificados = certificadosResult.rows;
+
+      // Obtener todas las resoluciones con información de empresa
+      const resolucionesQuery = `
+        SELECT
+          r.*,
+          e.nombre as empresa_nombre,
+          e.nit as empresa_nit
+        FROM resoluciones r
+        JOIN empresas e ON r.empresa_id = e.id
+        ORDER BY e.nombre, r.fecha_inicio DESC
+      `;
+      const resolucionesResult = await client.query(resolucionesQuery);
+      const resoluciones = resolucionesResult.rows;
+
+      // Obtener todos los documentos con información de empresa
+      const documentosQuery = `
+        SELECT
+          d.*,
+          e.nombre as empresa_nombre,
+          e.nit as empresa_nit
+        FROM documentos d
+        JOIN empresas e ON d.empresa_id = e.id
+        ORDER BY e.nombre, d.fecha_inicio DESC
+      `;
+      const documentosResult = await client.query(documentosQuery);
+      const documentos = documentosResult.rows;
+
+      return {
+        success: true,
+        data: {
+          empresas,
+          certificados,
+          resoluciones,
+          documentos
+        }
+      };
     } catch (error) {
       return { success: false, error: (error as Error).message };
     } finally {

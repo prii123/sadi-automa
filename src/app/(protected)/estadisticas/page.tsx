@@ -66,6 +66,30 @@ export default function EstadisticasHome() {
     router.push('/empresas');
   };
 
+  const handleExportExcel = async () => {
+    try {
+      const response = await fetch('/api/empresas/export');
+      if (response.ok) {
+        // Crear un blob con la respuesta y descargar el archivo
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `empresas_documentos_${new Date().toISOString().split('T')[0]}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        console.error('Error descargando archivo Excel');
+        alert('Error al descargar el archivo Excel');
+      }
+    } catch (error) {
+      console.error('Error en la exportación:', error);
+      alert('Error al exportar datos');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -86,12 +110,21 @@ export default function EstadisticasHome() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-900">Dashboard - Sistema de Gestión de Facturación</h1>
-        <button
-          onClick={fetchEstadisticas}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
-        >
-          Actualizar
-        </button>
+        <div className="flex space-x-3">
+          <button
+            onClick={handleExportExcel}
+            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors flex items-center"
+          >
+            <span className="mr-2">📊</span>
+            Exportar Excel
+          </button>
+          <button
+            onClick={fetchEstadisticas}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+          >
+            Actualizar
+          </button>
+        </div>
       </div>
 
       {/* Estadísticas Generales */}
