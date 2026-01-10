@@ -10,7 +10,7 @@ export async function GET() {
       FROM vencimientos_impuestos vi
       JOIN impuestos i ON vi.impuesto_id = i.id
       WHERE vi.activo = true
-      ORDER BY vi.anio_fiscal DESC, vi.fecha_vencimiento ASC
+      ORDER BY vi.anio_fiscal DESC, vi.periodo ASC
     `);
 
     await client.end();
@@ -31,14 +31,38 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { impuesto_id, anio_fiscal, periodo, fecha_vencimiento, descripcion } = body;
+    const {
+      impuesto_id,
+      anio_fiscal,
+      periodo,
+      descripcion,
+      depende_nit,
+      tipo_dependencia_nit,
+      fechas_por_digito
+    } = body;
 
     // Validación básica
-    if (!impuesto_id || !anio_fiscal || !fecha_vencimiento) {
+    if (!impuesto_id || !anio_fiscal) {
       return NextResponse.json(
-        { success: false, error: 'Los campos impuesto_id, anio_fiscal y fecha_vencimiento son requeridos' },
+        { success: false, error: 'Los campos impuesto_id y anio_fiscal son requeridos' },
         { status: 400 }
       );
+    }
+
+    // Validación de campos de dependencia del NIT
+    if (depende_nit) {
+      if (!tipo_dependencia_nit || !fechas_por_digito) {
+        return NextResponse.json(
+          { success: false, error: 'Si depende_nit es true, tipo_dependencia_nit y fechas_por_digito son requeridos' },
+          { status: 400 }
+        );
+      }
+      if (!['ultimo_digito', 'dos_ultimos_digitos'].includes(tipo_dependencia_nit)) {
+        return NextResponse.json(
+          { success: false, error: 'tipo_dependencia_nit debe ser "ultimo_digito" o "dos_ultimos_digitos"' },
+          { status: 400 }
+        );
+      }
     }
 
     const client = await import('pg').then(pg => new pg.Client(process.env.DATABASE_URL));
@@ -74,10 +98,18 @@ export async function POST(request: NextRequest) {
 
     // Crear el vencimiento
     const result = await client.query(
-      `INSERT INTO vencimientos_impuestos (impuesto_id, anio_fiscal, periodo, fecha_vencimiento, descripcion)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO vencimientos_impuestos (impuesto_id, anio_fiscal, periodo, descripcion, depende_nit, tipo_dependencia_nit, fechas_por_digito)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [impuesto_id, anio_fiscal, periodo || null, fecha_vencimiento, descripcion || null]
+      [
+        impuesto_id,
+        anio_fiscal,
+        periodo || null,
+        descripcion || null,
+        depende_nit || false,
+        tipo_dependencia_nit || null,
+        fechas_por_digito ? JSON.stringify(fechas_por_digito) : null
+      ]
     );
 
     await client.end();

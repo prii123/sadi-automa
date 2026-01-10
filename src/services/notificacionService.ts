@@ -131,13 +131,11 @@ export class NotificacionService {
           0 as resuelta,
           d.empresa_id,
           e.nombre as empresa_nombre,
-          e.nit as empresa_nit,
-          d.renovado,
-          d.facturado
+          e.nit as empresa_nit
         FROM documentos d
         JOIN empresas e ON d.empresa_id = e.id
         WHERE d.activo = 1
-        AND (d.renovado = 0 OR (d.renovado = 1 AND d.facturado = 0))
+        AND d.renovado = 0 AND d.facturado = 0
         AND d.fecha_final::date <= CURRENT_DATE + INTERVAL '30 days'
       `;
 

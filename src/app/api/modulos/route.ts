@@ -46,7 +46,8 @@ function getIconForModulo(nombre: string): string {
     'Usuarios': '👥',
     'Roles': '🔐',
     'Calendario Tributario': '📅',
-    'Impuestos': '💰'
+    'Impuestos': '💰',
+    'Plantillas': '📝'
   };
   return icons[nombre] || '📄';
 }

@@ -17,9 +17,11 @@ export interface VencimientoImpuesto {
   impuesto_id: number;
   anio_fiscal: number;
   periodo?: string;
-  fecha_vencimiento: Date;
   descripcion?: string;
   activo: boolean;
+  depende_nit?: boolean;
+  tipo_dependencia_nit?: 'ultimo_digito' | 'dos_ultimos_digitos';
+  fechas_por_digito?: Record<string, string>; // Ej: {"0": "2024-03-15", "1": "2024-03-20", "2": "2024-03-25"}
   impuesto?: Impuesto; // Para joins
 }
 
@@ -59,24 +61,32 @@ export class CalendarioTributarioService {
   calcularFechaVencimientoAjustada(
     vencimiento: VencimientoImpuesto,
     nitEmpresa: string
-  ): Date {
-    const ultimoDigito = parseInt(this.obtenerUltimoDigitoNIT(nitEmpresa)) || 0;
-
-    // Solo ajustar por NIT para impuestos mensuales/bimestrales
-    if (vencimiento.impuesto?.periodicidad === 'mensual' || vencimiento.impuesto?.periodicidad === 'bimestral') {
-      const fechaBase = new Date(vencimiento.fecha_vencimiento);
-      fechaBase.setDate(fechaBase.getDate() + ultimoDigito);
-
-      // Si el día resultante no existe en ese mes, usar el último día del mes
-      if (fechaBase.getDate() !== new Date(vencimiento.fecha_vencimiento).getDate() + ultimoDigito) {
-        fechaBase.setMonth(fechaBase.getMonth() + 1, 0);
-      }
-
-      return fechaBase;
+  ): Date | null {
+    // Si el vencimiento no depende del NIT, no hay fecha específica
+    if (!vencimiento.depende_nit || !vencimiento.tipo_dependencia_nit || !vencimiento.fechas_por_digito) {
+      return null;
     }
 
-    // Para otros casos, usar la fecha tal cual
-    return new Date(vencimiento.fecha_vencimiento);
+    // Obtener los dígitos relevantes del NIT
+    let digitosRelevantes: string;
+    if (vencimiento.tipo_dependencia_nit === 'ultimo_digito') {
+      digitosRelevantes = this.obtenerUltimoDigitoNIT(nitEmpresa);
+    } else if (vencimiento.tipo_dependencia_nit === 'dos_ultimos_digitos') {
+      digitosRelevantes = this.obtenerDosUltimosDigitosNIT(nitEmpresa);
+    } else {
+      return null;
+    }
+
+    // Buscar la fecha específica para estos dígitos
+    const fechaEspecifica = vencimiento.fechas_por_digito[digitosRelevantes];
+
+    if (fechaEspecifica) {
+      // Si hay una fecha específica para estos dígitos, usarla
+      return new Date(fechaEspecifica);
+    } else {
+      // Si no hay fecha específica, devolver null
+      return null;
+    }
   }
 
   /**
@@ -87,6 +97,16 @@ export class CalendarioTributarioService {
     const nitLimpio = nit.replace(/[-\s]/g, '');
     const nitSinVerificacion = nitLimpio.slice(0, -1);
     return nitSinVerificacion.slice(-1);
+  }
+
+  /**
+   * Obtiene los dos últimos dígitos del NIT (sin dígito de verificación)
+   */
+  private obtenerDosUltimosDigitosNIT(nit: string): string {
+    // Remover guiones, espacios y dígito de verificación
+    const nitLimpio = nit.replace(/[-\s]/g, '');
+    const nitSinVerificacion = nitLimpio.slice(0, -1);
+    return nitSinVerificacion.slice(-2);
   }
 
   /**
@@ -202,11 +222,11 @@ export class CalendarioTributarioService {
 
         // Insertar o actualizar en calendario_tributario
         await this.client.query(
-          `INSERT INTO calendario_tributario (empresa_id, vencimiento_impuesto_id, fecha_vencimiento, periodo)
-           VALUES ($1, $2, $3, $4)
-           ON CONFLICT (empresa_id, vencimiento_impuesto_id, periodo)
+          `INSERT INTO calendario_tributario (empresa_id, impuesto_id, fecha_vencimiento, periodo, estado)
+           VALUES ($1, $2, $3, $4, 'pendiente')
+           ON CONFLICT (empresa_id, impuesto_id, periodo)
            DO UPDATE SET fecha_vencimiento = EXCLUDED.fecha_vencimiento`,
-          [empresaId, vencimiento.id, fechaVencimientoAjustada, periodoCompleto]
+          [empresaId, vencimiento.impuesto_id, fechaVencimientoAjustada, periodoCompleto]
         );
       }
 
@@ -228,14 +248,17 @@ export class CalendarioTributarioService {
                i.tipo as tipo_impuesto, i.periodicidad,
                vi.anio_fiscal, vi.periodo as periodo_impuesto, vi.descripcion as vencimiento_descripcion
         FROM calendario_tributario ct
-        JOIN vencimientos_impuestos vi ON ct.vencimiento_impuesto_id = vi.id
-        JOIN impuestos i ON vi.impuesto_id = i.id
+        JOIN impuestos i ON ct.impuesto_id = i.id
+        LEFT JOIN vencimientos_impuestos vi ON vi.impuesto_id = ct.impuesto_id
+          AND vi.anio_fiscal = EXTRACT(YEAR FROM ct.fecha_vencimiento)
+          AND vi.periodo = ct.periodo
+          AND vi.activo = true
         WHERE ct.empresa_id = $1
       `;
       const params = [empresaId];
 
       if (year) {
-        query += ' AND vi.anio_fiscal = $2';
+        query += ' AND EXTRACT(YEAR FROM ct.fecha_vencimiento) = $2';
         params.push(year);
       }
 
@@ -291,9 +314,11 @@ export class CalendarioTributarioService {
         impuesto_id: row.impuesto_id,
         anio_fiscal: row.anio_fiscal,
         periodo: row.periodo,
-        fecha_vencimiento: new Date(row.fecha_vencimiento),
         descripcion: row.descripcion,
         activo: row.activo,
+        depende_nit: row.depende_nit,
+        tipo_dependencia_nit: row.tipo_dependencia_nit,
+        fechas_por_digito: row.fechas_por_digito,
         impuesto: {
           id: row.impuesto_id,
           nombre: row.impuesto_nombre,
@@ -311,14 +336,49 @@ export class CalendarioTributarioService {
   }
 
   /**
-   * Crea un nuevo vencimiento de impuesto
+   * Calcula la fecha de vencimiento específica para una empresa basada en su NIT
    */
+  calcularFechaVencimientoConNIT(
+    fechaBase: Date,
+    nit: string,
+    dependeNit: boolean,
+    tipoDependenciaNit?: 'ultimo_digito' | 'dos_ultimos_digitos',
+    diasPorDigito?: Record<string, number>
+  ): Date {
+    if (!dependeNit || !tipoDependenciaNit || !diasPorDigito) {
+      return fechaBase;
+    }
+
+    // Extraer los dígitos relevantes del NIT
+    let digitosRelevantes: string;
+    if (tipoDependenciaNit === 'ultimo_digito') {
+      digitosRelevantes = nit.slice(-1); // Último dígito
+    } else if (tipoDependenciaNit === 'dos_ultimos_digitos') {
+      digitosRelevantes = nit.slice(-2); // Últimos 2 dígitos
+    } else {
+      return fechaBase;
+    }
+
+    // Calcular días adicionales basados en los dígitos
+    let diasAdicionales = 0;
+    for (const digito of digitosRelevantes) {
+      diasAdicionales += diasPorDigito[digito] || 0;
+    }
+
+    // Crear nueva fecha sumando los días adicionales
+    const fechaCalculada = new Date(fechaBase);
+    fechaCalculada.setDate(fechaCalculada.getDate() + diasAdicionales);
+
+    return fechaCalculada;
+  }
   async crearVencimientoImpuesto(
     impuestoId: number,
     anioFiscal: number,
     periodo: string | null,
-    fechaVencimiento: Date,
-    descripcion?: string
+    descripcion?: string,
+    dependeNit?: boolean,
+    tipoDependenciaNit?: 'ultimo_digito' | 'dos_ultimos_digitos',
+    fechasPorDigito?: Record<string, string>
   ): Promise<VencimientoImpuesto> {
     try {
       // Verificar que el impuesto existe
@@ -343,10 +403,10 @@ export class CalendarioTributarioService {
 
       // Crear el vencimiento
       const result = await this.client.query(
-        `INSERT INTO vencimientos_impuestos (impuesto_id, anio_fiscal, periodo, fecha_vencimiento, descripcion)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO vencimientos_impuestos (impuesto_id, anio_fiscal, periodo, descripcion, depende_nit, tipo_dependencia_nit, fechas_por_digito)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
-        [impuestoId, anioFiscal, periodo, fechaVencimiento, descripcion]
+        [impuestoId, anioFiscal, periodo, descripcion, dependeNit || false, tipoDependenciaNit, fechasPorDigito ? JSON.stringify(fechasPorDigito) : null]
       );
 
       return {
@@ -354,9 +414,11 @@ export class CalendarioTributarioService {
         impuesto_id: result.rows[0].impuesto_id,
         anio_fiscal: result.rows[0].anio_fiscal,
         periodo: result.rows[0].periodo,
-        fecha_vencimiento: new Date(result.rows[0].fecha_vencimiento),
         descripcion: result.rows[0].descripcion,
-        activo: result.rows[0].activo
+        activo: result.rows[0].activo,
+        depende_nit: result.rows[0].depende_nit,
+        tipo_dependencia_nit: result.rows[0].tipo_dependencia_nit,
+        fechas_por_digito: result.rows[0].fechas_por_digito
       };
     } catch (error) {
       console.error('❌ Error creando vencimiento:', error);
@@ -369,18 +431,22 @@ export class CalendarioTributarioService {
    */
   async actualizarVencimientoImpuesto(
     id: number,
-    fechaVencimiento?: Date,
-    descripcion?: string
+    descripcion?: string,
+    dependeNit?: boolean,
+    tipoDependenciaNit?: 'ultimo_digito' | 'dos_ultimos_digitos',
+    fechasPorDigito?: Record<string, string>
   ): Promise<VencimientoImpuesto> {
     try {
       const result = await this.client.query(
         `UPDATE vencimientos_impuestos
-         SET fecha_vencimiento = COALESCE($1, fecha_vencimiento),
-             descripcion = COALESCE($2, descripcion),
+         SET descripcion = COALESCE($1, descripcion),
+             depende_nit = COALESCE($2, depende_nit),
+             tipo_dependencia_nit = COALESCE($3, tipo_dependencia_nit),
+             fechas_por_digito = COALESCE($4, fechas_por_digito),
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $3
+         WHERE id = $5
          RETURNING *`,
-        [fechaVencimiento, descripcion, id]
+        [descripcion, dependeNit, tipoDependenciaNit, fechasPorDigito ? JSON.stringify(fechasPorDigito) : null, id]
       );
 
       if (result.rows.length === 0) {
@@ -392,9 +458,11 @@ export class CalendarioTributarioService {
         impuesto_id: result.rows[0].impuesto_id,
         anio_fiscal: result.rows[0].anio_fiscal,
         periodo: result.rows[0].periodo,
-        fecha_vencimiento: new Date(result.rows[0].fecha_vencimiento),
         descripcion: result.rows[0].descripcion,
-        activo: result.rows[0].activo
+        activo: result.rows[0].activo,
+        depende_nit: result.rows[0].depende_nit,
+        tipo_dependencia_nit: result.rows[0].tipo_dependencia_nit,
+        fechas_por_digito: result.rows[0].fechas_por_digito
       };
     } catch (error) {
       console.error('❌ Error actualizando vencimiento:', error);

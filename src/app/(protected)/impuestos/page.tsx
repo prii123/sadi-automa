@@ -1,26 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import * as XLSX from 'xlsx';
-
-interface Impuesto {
-  id: number;
-  nombre: string;
-  codigo: string;
-  tipo: 'nacional' | 'departamental' | 'municipal';
-  periodicidad: 'anual' | 'bimestral' | 'cuatrimestral' | 'mensual';
-  descripcion: string;
-  activo: boolean;
-}
+import { processExcelFile, processDataFromLines, downloadExcel, generateTemplateData, ProcessedExcelData, Impuesto } from '@/lib/excelProcessor';
 
 interface VencimientoImpuesto {
   id: number;
   impuesto_id: number;
   anio_fiscal: number;
   periodo?: string;
-  fecha_vencimiento: string;
   descripcion?: string;
   activo: boolean;
+  depende_nit?: boolean;
+  tipo_dependencia_nit?: 'ultimo_digito' | 'dos_ultimos_digitos';
+  fechas_por_digito?: Record<string, string>;
 }
 
 export default function ImpuestosPage() {
@@ -31,6 +23,8 @@ export default function ImpuestosPage() {
   const [showCreateImpuesto, setShowCreateImpuesto] = useState(false);
   const [showCreateVencimiento, setShowCreateVencimiento] = useState(false);
   const [showUploadCSV, setShowUploadCSV] = useState(false);
+  const [showEditImpuesto, setShowEditImpuesto] = useState(false);
+  const [editingImpuesto, setEditingImpuesto] = useState<Impuesto | null>(null);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvData, setCsvData] = useState<any[]>([]);
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
@@ -40,12 +34,36 @@ export default function ImpuestosPage() {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedImpuestoFilter, setSelectedImpuestoFilter] = useState<number | null>(null);
 
+  // Estados para expansión de vencimientos
+  const [expandedVencimientos, setExpandedVencimientos] = useState<Set<number>>(new Set());
+
+  // Función para toggle expansión de vencimiento
+  const toggleVencimientoExpansion = (vencimientoId: number) => {
+    setExpandedVencimientos(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(vencimientoId)) {
+        newSet.delete(vencimientoId);
+      } else {
+        newSet.add(vencimientoId);
+      }
+      return newSet;
+    });
+  };
+
   // Estados para formularios
   const [newImpuesto, setNewImpuesto] = useState({
     nombre: '',
     codigo: '',
     tipo: 'nacional' as 'nacional' | 'departamental' | 'municipal',
-    periodicidad: 'mensual' as 'anual' | 'bimestral' | 'cuatrimestral' | 'mensual',
+    periodicidad: 'mensual' as 'anual' | 'bimestral' | 'cuatrimestral' | 'mensual' | 'semestral' | 'trimestral',
+    descripcion: ''
+  });
+
+  const [editImpuesto, setEditImpuesto] = useState({
+    nombre: '',
+    codigo: '',
+    tipo: 'nacional' as 'nacional' | 'departamental' | 'municipal',
+    periodicidad: 'mensual' as 'anual' | 'bimestral' | 'cuatrimestral' | 'mensual' | 'semestral' | 'trimestral',
     descripcion: ''
   });
 
@@ -53,9 +71,60 @@ export default function ImpuestosPage() {
     impuesto_id: 0,
     anio_fiscal: new Date().getFullYear(),
     periodo: '',
-    fecha_vencimiento: '',
-    descripcion: ''
+    descripcion: '',
+    depende_nit: false,
+    tipo_dependencia_nit: 'ultimo_digito' as 'ultimo_digito' | 'dos_ultimos_digitos',
+    fechas_por_periodo: {} as Record<string, Record<string, string>> // periodo -> {digito: fecha}
   });
+
+  // Función para obtener los períodos según la periodicidad del impuesto
+  const getPeriodosPorPeriodicidad = (periodicidad: string) => {
+    switch (periodicidad) {
+      case 'mensual':
+        return Array.from({ length: 12 }, (_, i) => ({
+          numero: i + 1,
+          nombre: `Mes ${i + 1}`,
+          periodo: (i + 1).toString().padStart(2, '0')
+        }));
+      case 'bimestral':
+        return Array.from({ length: 6 }, (_, i) => ({
+          numero: i + 1,
+          nombre: `Bimestre ${i + 1}`,
+          periodo: `B${i + 1}`
+        }));
+      case 'trimestral':
+        return Array.from({ length: 4 }, (_, i) => ({
+          numero: i + 1,
+          nombre: `Trimestre ${i + 1}`,
+          periodo: `T${i + 1}`
+        }));
+      case 'cuatrimestral':
+        return Array.from({ length: 3 }, (_, i) => ({
+          numero: i + 1,
+          nombre: `Cuatrimestre ${i + 1}`,
+          periodo: `Q${i + 1}`
+        }));
+      case 'semestral':
+        return Array.from({ length: 2 }, (_, i) => ({
+          numero: i + 1,
+          nombre: `Semestre ${i + 1}`,
+          periodo: `S${i + 1}`
+        }));
+      case 'anual':
+        return [{
+          numero: 1,
+          nombre: 'Anual',
+          periodo: null
+        }];
+      default:
+        return [];
+    }
+  };
+
+  // Función para obtener el impuesto seleccionado
+  const getImpuestoSeleccionado = () => {
+    return impuestos.find(impuesto => impuesto.id === newVencimiento.impuesto_id);
+  };
 
   useEffect(() => {
     loadData();
@@ -71,6 +140,8 @@ export default function ImpuestosPage() {
       setLoading(false);
     }
   };
+
+
 
   const loadImpuestos = async () => {
     try {
@@ -134,35 +205,155 @@ export default function ImpuestosPage() {
     }
   };
 
-  const crearVencimiento = async (e: React.FormEvent) => {
+  const editarImpuesto = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const vencimientoData = {
-        ...newVencimiento,
-        periodo: newVencimiento.periodo.trim() === '' ? null : newVencimiento.periodo.trim()
-      };
+    // console.log('editarImpuesto llamada');
 
-      const response = await fetch('/api/vencimientos-impuestos', {
-        method: 'POST',
+    if (!editingImpuesto) {
+      // console.log('No hay impuesto para editar');
+      return;
+    }
+
+    // console.log('Editando impuesto:', editingImpuesto.id, editingImpuesto.nombre);
+    // console.log('Datos del formulario:', {
+    //   nombre: editImpuesto.nombre,
+    //   codigo: editImpuesto.codigo,
+    //   tipo: editImpuesto.tipo,
+    //   periodicidad: editImpuesto.periodicidad,
+    //   descripcion: editImpuesto.descripcion
+    // });
+
+    // Validación de campos requeridos
+    if (!editImpuesto.nombre || !editImpuesto.codigo || !editImpuesto.tipo || !editImpuesto.periodicidad) {
+      // console.log('Validación fallida:', {
+      //   nombre: editImpuesto.nombre,
+      //   codigo: editImpuesto.codigo,
+      //   tipo: editImpuesto.tipo,
+      //   periodicidad: editImpuesto.periodicidad
+      // });
+      alert('Todos los campos son requeridos');
+      return;
+    }
+
+    // console.log('Validación pasada, enviando a API...');
+
+    try {
+      const response = await fetch(`/api/impuestos/${editingImpuesto.id}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(vencimientoData)
+        body: JSON.stringify(editImpuesto)
+      });
+
+      const data = await response.json();
+      // console.log('Respuesta de la API:', data);
+
+      if (data.success) {
+        setEditImpuesto({
+          nombre: '',
+          codigo: '',
+          tipo: 'nacional',
+          periodicidad: 'mensual',
+          descripcion: ''
+        });
+        setEditingImpuesto(null);
+        setShowEditImpuesto(false);
+        loadImpuestos();
+        alert('Impuesto actualizado exitosamente');
+      } else {
+        alert('Error actualizando impuesto: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error actualizando impuesto:', error);
+      alert('Error actualizando impuesto');
+    }
+  };
+
+  const eliminarImpuesto = async (impuestoId: number) => {
+    if (!confirm('¿Está seguro de que desea eliminar este impuesto? Esta acción no se puede deshacer.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/impuestos/${impuestoId}`, {
+        method: 'DELETE'
       });
 
       const data = await response.json();
       if (data.success) {
-        setNewVencimiento({
-          impuesto_id: 0,
-          anio_fiscal: new Date().getFullYear(),
-          periodo: '',
-          fecha_vencimiento: '',
-          descripcion: ''
-        });
-        setShowCreateVencimiento(false);
-        loadVencimientos();
-        alert('Vencimiento creado exitosamente');
+        loadImpuestos();
+        loadVencimientos(); // Recargar vencimientos ya que algunos pueden haber sido eliminados
+        alert('Impuesto eliminado exitosamente');
       } else {
-        alert('Error creando vencimiento: ' + data.error);
+        alert('Error eliminando impuesto: ' + data.error);
       }
+    } catch (error) {
+      console.error('Error eliminando impuesto:', error);
+      alert('Error eliminando impuesto');
+    }
+  };
+
+  const abrirEditarImpuesto = (impuesto: Impuesto) => {
+    // console.log('Abriendo edición de impuesto:', impuesto.nombre, '(ID:', impuesto.id + ')');
+    setEditingImpuesto(impuesto);
+    setEditImpuesto({
+      nombre: impuesto.nombre,
+      codigo: impuesto.codigo,
+      tipo: impuesto.tipo,
+      periodicidad: impuesto.periodicidad,
+      descripcion: impuesto.descripcion
+    });
+    setShowEditImpuesto(true);
+  };
+
+  const crearVencimiento = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const impuestoSeleccionado = getImpuestoSeleccionado();
+      if (!impuestoSeleccionado) {
+        alert('Debe seleccionar un impuesto');
+        return;
+      }
+
+      const periodos = getPeriodosPorPeriodicidad(impuestoSeleccionado.periodicidad);
+
+      // Crear vencimientos para cada período
+      for (const periodoInfo of periodos) {
+        const vencimientoData = {
+          impuesto_id: newVencimiento.impuesto_id,
+          anio_fiscal: newVencimiento.anio_fiscal,
+          periodo: periodoInfo.periodo,
+          descripcion: `${newVencimiento.descripcion} - ${periodoInfo.nombre}`,
+          depende_nit: newVencimiento.depende_nit,
+          tipo_dependencia_nit: newVencimiento.tipo_dependencia_nit,
+          fechas_por_digito: newVencimiento.fechas_por_periodo[periodoInfo.periodo || 'anual'] || {}
+        };
+
+        const response = await fetch('/api/vencimientos-impuestos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(vencimientoData)
+        });
+
+        const data = await response.json();
+        if (!data.success) {
+          alert(`Error creando vencimiento para ${periodoInfo.nombre}: ${data.error}`);
+          return;
+        }
+      }
+
+      // Reset del formulario
+      setNewVencimiento({
+        impuesto_id: 0,
+        anio_fiscal: new Date().getFullYear(),
+        periodo: '',
+        descripcion: '',
+        depende_nit: false,
+        tipo_dependencia_nit: 'ultimo_digito',
+        fechas_por_periodo: {}
+      });
+      setShowCreateVencimiento(false);
+      loadVencimientos();
+      alert('Vencimientos creados exitosamente');
     } catch (error) {
       console.error('Error creando vencimiento:', error);
       alert('Error creando vencimiento');
@@ -182,12 +373,15 @@ export default function ImpuestosPage() {
     try {
       const fileExtension = file.name.split('.').pop()?.toLowerCase();
 
-      if (fileExtension === 'csv') {
-        await processCSVFile(file);
-      } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-        await processExcelFile(file);
+      if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+        const rows = await processExcelFile(file);
+        // console.log('Filas procesadas del Excel:', rows);
+        const { errors, validData } = processDataFromLines(rows, impuestos);
+        // console.log(' procesar datos del Excel:', validData);
+        setCsvErrors(errors);
+        setCsvData(validData);
       } else {
-        setCsvErrors(['Formato de archivo no soportado. Use CSV o Excel (.xlsx, .xls)']);
+        setCsvErrors(['Formato de archivo no soportado. Use Excel (.xlsx, .xls)']);
         setCsvData([]);
         return;
       }
@@ -198,110 +392,9 @@ export default function ImpuestosPage() {
     }
   };
 
-  const processCSVFile = async (file: File) => {
-    const text = await file.text();
-    const lines = text.split('\n').filter(line => line.trim());
-    processDataFromLines(lines);
-  };
 
-  const processExcelFile = async (file: File) => {
-    const data = await file.arrayBuffer();
-    const workbook = XLSX.read(data);
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-    // Convertir a formato de líneas como en CSV
-    const lines = jsonData.map((row: any) =>
-      Array.isArray(row) ? row.map(cell => cell || '').join(',') : ''
-    ).filter(line => line.trim());
 
-    processDataFromLines(lines);
-  };
-
-  const processDataFromLines = (lines: string[]) => {
-    try {
-      if (lines.length === 0) {
-        setCsvErrors(['El archivo está vacío']);
-        setCsvData([]);
-        return;
-      }
-
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-
-      // Validar headers requeridos
-      const requiredHeaders = ['impuesto_codigo', 'anio_fiscal', 'fecha_vencimiento'];
-      const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
-
-      if (missingHeaders.length > 0) {
-        setCsvErrors([`Headers requeridos faltantes: ${missingHeaders.join(', ')}`]);
-        setCsvData([]);
-        return;
-      }
-
-      // Procesar datos
-      const data = lines.slice(1).map((line, index) => {
-        const values = line.split(',').map(v => v.trim());
-        const row: any = {};
-
-        headers.forEach((header, i) => {
-          row[header] = values[i] || '';
-        });
-
-        return { ...row, rowNumber: index + 2 };
-      });
-
-      // Validar datos
-      const errors: string[] = [];
-      const validData: any[] = [];
-
-      data.forEach((row, index) => {
-        const rowErrors: string[] = [];
-
-        // Validar impuesto_codigo
-        if (!row.impuesto_codigo) {
-          rowErrors.push('impuesto_codigo es requerido');
-        } else {
-          const impuesto = impuestos.find(i => i.codigo === row.impuesto_codigo);
-          if (!impuesto) {
-            rowErrors.push(`Impuesto con código '${row.impuesto_codigo}' no encontrado`);
-          } else {
-            row.impuesto_id = impuesto.id;
-          }
-        }
-
-        // Validar anio_fiscal
-        if (!row.anio_fiscal || isNaN(parseInt(row.anio_fiscal))) {
-          rowErrors.push('anio_fiscal debe ser un número válido');
-        } else {
-          row.anio_fiscal = parseInt(row.anio_fiscal);
-        }
-
-        // Validar fecha_vencimiento
-        if (!row.fecha_vencimiento) {
-          rowErrors.push('fecha_vencimiento es requerido');
-        } else {
-          const date = new Date(row.fecha_vencimiento);
-          if (isNaN(date.getTime())) {
-            rowErrors.push('fecha_vencimiento debe tener formato YYYY-MM-DD válido');
-          }
-        }
-
-        if (rowErrors.length > 0) {
-          errors.push(`Fila ${row.rowNumber}: ${rowErrors.join(', ')}`);
-        } else {
-          validData.push(row);
-        }
-      });
-
-      setCsvErrors(errors);
-      setCsvData(validData);
-
-    } catch (error) {
-      console.error('Error procesando CSV:', error);
-      setCsvErrors(['Error procesando el archivo CSV']);
-      setCsvData([]);
-    }
-  };
 
   const uploadCSVData = async () => {
     if (csvData.length === 0) {
@@ -319,14 +412,14 @@ export default function ImpuestosPage() {
 
       const data = await response.json();
       if (data.success) {
-        alert(`Se crearon ${data.created} vencimientos exitosamente`);
+        alert(`Se crearon ${data.created} vencimientos exitosamente desde ${csvData.length} configuraciones`);
         setShowUploadCSV(false);
         setCsvFile(null);
         setCsvData([]);
         setCsvErrors([]);
         loadVencimientos();
       } else {
-        alert('Error subiendo vencimientos: ' + data.error);
+        alert('Error subiendo configuraciones: ' + data.error);
       }
     } catch (error) {
       console.error('Error subiendo CSV:', error);
@@ -336,78 +429,10 @@ export default function ImpuestosPage() {
     }
   };
 
-  const downloadTemplate = (format: 'csv' | 'xlsx') => {
-    // Crear datos de ejemplo usando los impuestos disponibles
-    const currentYear = new Date().getFullYear();
-    const exampleData = [];
 
-    // Agregar header
-    exampleData.push(['impuesto_codigo', 'anio_fiscal', 'fecha_vencimiento', 'periodo', 'descripcion']);
-
-    // Agregar ejemplos usando los primeros 3 impuestos disponibles
-    const sampleImpuestos = impuestos.slice(0, 3);
-    sampleImpuestos.forEach((impuesto, index) => {
-      // Ejemplo 1: Vencimiento mensual
-      exampleData.push([
-        impuesto.codigo,
-        currentYear,
-        `${currentYear}-03-15`,
-        'Marzo',
-        `Vencimiento ${impuesto.nombre} - Marzo ${currentYear}`
-      ]);
-
-      // Ejemplo 2: Vencimiento trimestral
-      exampleData.push([
-        impuesto.codigo,
-        currentYear,
-        `${currentYear}-06-15`,
-        'Q2',
-        `Vencimiento ${impuesto.nombre} - Segundo trimestre ${currentYear}`
-      ]);
-
-      // Ejemplo 3: Vencimiento anual
-      exampleData.push([
-        impuesto.codigo,
-        currentYear,
-        `${currentYear}-12-31`,
-        'Anual',
-        `Vencimiento ${impuesto.nombre} - ${currentYear}`
-      ]);
-    });
-
-    if (format === 'csv') {
-      downloadCSV(exampleData, currentYear);
-    } else if (format === 'xlsx') {
-      downloadExcel(exampleData, currentYear);
-    }
-  };
-
-  const downloadCSV = (data: any[], year: number) => {
-    // Convertir a CSV
-    const csvContent = data.map(row =>
-      row.map((field: any) => `"${field}"`).join(',')
-    ).join('\n');
-
-    // Crear y descargar el archivo
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `plantilla_vencimientos_impuestos_${year}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const downloadExcel = (data: any[], year: number) => {
-    // Crear workbook y worksheet
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Vencimientos');
-
-    // Generar archivo Excel
-    XLSX.writeFile(wb, `plantilla_vencimientos_impuestos_${year}.xlsx`);
+  const downloadTemplate = () => {
+    const data = generateTemplateData(impuestos);
+    downloadExcel(data, new Date().getFullYear());
   };
 
   const getVencimientosPorImpuesto = (impuestoId: number) => {
@@ -496,7 +521,7 @@ export default function ImpuestosPage() {
             onClick={() => setShowUploadCSV(!showUploadCSV)}
             className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700"
           >
-            {showUploadCSV ? 'Cancelar' : '📄 Subir CSV'}
+            {showUploadCSV ? 'Cancelar' : '� Subir Excel'}
           </button>
         </div>
       </div>
@@ -515,7 +540,7 @@ export default function ImpuestosPage() {
                 required
                 value={newImpuesto.nombre}
                 onChange={(e) => setNewImpuesto({...newImpuesto, nombre: e.target.value})}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
                 placeholder="Ej: IVA Mensual"
               />
             </div>
@@ -528,7 +553,7 @@ export default function ImpuestosPage() {
                 required
                 value={newImpuesto.codigo}
                 onChange={(e) => setNewImpuesto({...newImpuesto, codigo: e.target.value})}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
                 placeholder="Ej: IVA-M"
               />
             </div>
@@ -539,7 +564,7 @@ export default function ImpuestosPage() {
               <select
                 value={newImpuesto.tipo}
                 onChange={(e) => setNewImpuesto({...newImpuesto, tipo: e.target.value as any})}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
               >
                 <option value="nacional">Nacional</option>
                 <option value="departamental">Departamental</option>
@@ -553,7 +578,7 @@ export default function ImpuestosPage() {
               <select
                 value={newImpuesto.periodicidad}
                 onChange={(e) => setNewImpuesto({...newImpuesto, periodicidad: e.target.value as any})}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
               >
                 <option value="mensual">Mensual</option>
                 <option value="bimestral">Bimestral</option>
@@ -568,7 +593,7 @@ export default function ImpuestosPage() {
               <textarea
                 value={newImpuesto.descripcion}
                 onChange={(e) => setNewImpuesto({...newImpuesto, descripcion: e.target.value})}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
                 rows={3}
                 placeholder="Descripción del impuesto..."
               />
@@ -592,6 +617,130 @@ export default function ImpuestosPage() {
         </div>
       )}
 
+      {/* Modal Editar Impuesto */}
+      {showEditImpuesto && editingImpuesto && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-black">Editar Impuesto</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditImpuesto(false);
+                  setEditingImpuesto(null);
+                  setEditImpuesto({
+                    nombre: '',
+                    codigo: '',
+                    tipo: 'nacional',
+                    periodicidad: 'mensual',
+                    descripcion: ''
+                  });
+                }}
+                className="text-gray-500 hover:text-gray-700 text-xl"
+              >
+                ×
+              </button>
+            </div>
+            <form onSubmit={editarImpuesto} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-black mb-2">
+                  Nombre del Impuesto
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editImpuesto.nombre}
+                  onChange={(e) => setEditImpuesto({...editImpuesto, nombre: e.target.value})}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  placeholder="Ej: IVA Mensual"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-black mb-2">
+                  Código
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editImpuesto.codigo}
+                  onChange={(e) => setEditImpuesto({...editImpuesto, codigo: e.target.value})}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  placeholder="Ej: IVA-M"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-black mb-2">
+                  Tipo
+                </label>
+                <select
+                  required
+                  value={editImpuesto.tipo}
+                  onChange={(e) => setEditImpuesto({...editImpuesto, tipo: e.target.value as 'nacional' | 'departamental' | 'municipal'})}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                >
+                  <option value="nacional">Nacional</option>
+                  <option value="departamental">Departamental</option>
+                  <option value="municipal">Municipal</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-black mb-2">
+                  Periodicidad
+                </label>
+                <select
+                  required
+                  value={editImpuesto.periodicidad}
+                  onChange={(e) => setEditImpuesto({...editImpuesto, periodicidad: e.target.value as 'anual' | 'bimestral' | 'cuatrimestral' | 'mensual' | 'semestral' | 'trimestral'})}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                >
+                  <option value="mensual">Mensual</option>
+                  <option value="bimestral">Bimestral</option>
+                  <option value="cuatrimestral">Cuatrimestral</option>
+                  <option value="anual">Anual</option>
+                </select>
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-black mb-2">
+                  Descripción
+                </label>
+                <textarea
+                  value={editImpuesto.descripcion}
+                  onChange={(e) => setEditImpuesto({...editImpuesto, descripcion: e.target.value})}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  rows={3}
+                  placeholder="Descripción del impuesto..."
+                />
+              </div>
+              <div className="md:col-span-2 flex gap-4 justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditImpuesto(false);
+                    setEditingImpuesto(null);
+                    setEditImpuesto({
+                      nombre: '',
+                      codigo: '',
+                      tipo: 'nacional',
+                      periodicidad: 'mensual',
+                      descripcion: ''
+                    });
+                  }}
+                  className="bg-gray-600 text-white px-6 py-2 rounded-md hover:bg-gray-700"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
+                >
+                  Actualizar Impuesto
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Formulario Crear Vencimiento */}
       {showCreateVencimiento && (
         <div className="bg-white rounded-lg shadow p-6 mb-6">
@@ -605,7 +754,7 @@ export default function ImpuestosPage() {
                 required
                 value={newVencimiento.impuesto_id}
                 onChange={(e) => setNewVencimiento({...newVencimiento, impuesto_id: parseInt(e.target.value)})}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900"
               >
                 <option value={0}>Seleccionar impuesto...</option>
                 {impuestos && impuestos.map((impuesto) => (
@@ -624,7 +773,7 @@ export default function ImpuestosPage() {
                 required
                 value={newVencimiento.anio_fiscal}
                 onChange={(e) => setNewVencimiento({...newVencimiento, anio_fiscal: parseInt(e.target.value)})}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900"
                 min={2020}
                 max={2030}
               />
@@ -637,20 +786,8 @@ export default function ImpuestosPage() {
                 type="text"
                 value={newVencimiento.periodo}
                 onChange={(e) => setNewVencimiento({...newVencimiento, periodo: e.target.value})}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900"
                 placeholder="Ej: 01, 02, Q1, B1"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-black mb-2">
-                Fecha de Vencimiento
-              </label>
-              <input
-                type="date"
-                required
-                value={newVencimiento.fecha_vencimiento}
-                onChange={(e) => setNewVencimiento({...newVencimiento, fecha_vencimiento: e.target.value})}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
             </div>
             <div className="md:col-span-2">
@@ -660,11 +797,115 @@ export default function ImpuestosPage() {
               <textarea
                 value={newVencimiento.descripcion}
                 onChange={(e) => setNewVencimiento({...newVencimiento, descripcion: e.target.value})}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900"
                 rows={2}
                 placeholder="Descripción del vencimiento..."
               />
             </div>
+
+            {/* Configuración de dependencia del NIT */}
+            <div className="md:col-span-2">
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={newVencimiento.depende_nit}
+                  onChange={(e) => setNewVencimiento({...newVencimiento, depende_nit: e.target.checked})}
+                  className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                />
+                <span className="text-sm font-medium text-black">Este vencimiento depende del NIT de la empresa</span>
+              </label>
+            </div>
+
+            {newVencimiento.depende_nit && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-black mb-2">
+                    Tipo de Dependencia
+                  </label>
+                  <select
+                    value={newVencimiento.tipo_dependencia_nit}
+                    onChange={(e) => setNewVencimiento({...newVencimiento, tipo_dependencia_nit: e.target.value as any})}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900"
+                  >
+                    <option value="ultimo_digito">Último dígito del NIT</option>
+                    <option value="dos_ultimos_digitos">Últimos 2 dígitos del NIT</option>
+                  </select>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-black mb-2">
+                    Fechas específicas por período y dígito
+                  </label>
+                  <div className="bg-gray-50 p-4 rounded-md">
+                    <p className="text-xs text-gray-600 mb-3">
+                      Configure las fechas específicas de vencimiento para cada período según los dígitos del NIT.
+                      {newVencimiento.tipo_dependencia_nit === 'ultimo_digito' && (
+                        <> Cada dígito (0-9) tendrá una fecha específica de vencimiento por período.</>
+                      )}
+                      {newVencimiento.tipo_dependencia_nit === 'dos_ultimos_digitos' && (
+                        <> Cada combinación de dos dígitos (00-99) tendrá una fecha específica de vencimiento por período.</>
+                      )}
+                    </p>
+
+                    {(() => {
+                      const impuestoSeleccionado = getImpuestoSeleccionado();
+                      if (!impuestoSeleccionado) {
+                        return <p className="text-sm text-gray-500">Seleccione un impuesto primero</p>;
+                      }
+
+                      const periodos = getPeriodosPorPeriodicidad(impuestoSeleccionado.periodicidad);
+                      const digitos = newVencimiento.tipo_dependencia_nit === 'ultimo_digito'
+                        ? Array.from({ length: 10 }, (_, i) => i.toString())
+                        : Array.from({ length: 100 }, (_, i) => i.toString().padStart(2, '0'));
+
+                      return (
+                        <div className="space-y-6">
+                          {periodos.map((periodoInfo) => (
+                            <div key={periodoInfo.numero} className="border border-gray-200 rounded-md p-4">
+                              <h4 className="text-sm font-medium text-black mb-3">{periodoInfo.nombre}</h4>
+                              <div className={`grid gap-3 ${
+                                newVencimiento.tipo_dependencia_nit === 'ultimo_digito'
+                                  ? 'grid-cols-2 md:grid-cols-5'
+                                  : 'grid-cols-2 md:grid-cols-4 lg:grid-cols-6 max-h-64 overflow-y-auto'
+                              }`}>
+                                {digitos.map((digito) => (
+                                  <div key={`${periodoInfo.periodo}-${digito}`} className="flex flex-col">
+                                    <label className="text-xs text-gray-600 mb-1 font-medium">
+                                      {digito}
+                                    </label>
+                                    <input
+                                      type="date"
+                                      value={newVencimiento.fechas_por_periodo?.[periodoInfo.periodo || 'anual']?.[digito] || ''}
+                                      onChange={(e) => {
+                                        const fecha = e.target.value;
+                                        const periodoKey = periodoInfo.periodo || 'anual';
+                                        setNewVencimiento({
+                                          ...newVencimiento,
+                                          fechas_por_periodo: {
+                                            ...newVencimiento.fechas_por_periodo,
+                                            [periodoKey]: {
+                                              ...newVencimiento.fechas_por_periodo[periodoKey],
+                                              [digito]: fecha
+                                            }
+                                          }
+                                        });
+                                      }}
+                                      className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 text-gray-900"
+                                      placeholder="YYYY-MM-DD"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </>
+            )}
+
             <div className="md:col-span-2 flex gap-4">
               <button
                 type="submit"
@@ -684,39 +925,52 @@ export default function ImpuestosPage() {
         </div>
       )}
 
-      {/* Formulario Subir CSV */}
+      {/* Formulario Subir Excel */}
       {showUploadCSV && (
         <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h3 className="text-lg font-semibold text-black mb-4">Subir Vencimientos desde CSV</h3>
+          <h3 className="text-lg font-semibold text-black mb-4">Subir Vencimientos desde Excel</h3>
 
-          {/* Información del formato CSV/Excel */}
+          {/* Información del formato Excel */}
           <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-4">
-            <h4 className="text-sm font-medium text-blue-900 mb-2">Formatos aceptados: CSV y Excel</h4>
+            <h4 className="text-sm font-medium text-blue-900 mb-2">Formato aceptado: Excel (.xlsx, .xls)</h4>
             <p className="text-xs text-blue-800 mb-2">
-              El archivo debe tener las siguientes columnas (en orden):
+              El archivo debe tener las siguientes columnas:
             </p>
-            <code className="text-xs bg-blue-100 px-2 py-1 rounded block">
-              impuesto_codigo,anio_fiscal,fecha_vencimiento,periodo,descripcion
+            <code className="text-xs bg-blue-100 px-2 py-1 rounded block mb-2">
+              impuesto_codigo,anio_fiscal,periodo,descripcion,depende_nit,tipo_dependencia_nit,digito,fecha_vencimiento
             </code>
-            <p className="text-xs text-blue-700 mt-2">
-              • <strong>impuesto_codigo</strong>: Código del impuesto (requerido)<br/>
-              • <strong>anio_fiscal</strong>: Año fiscal (requerido)<br/>
-              • <strong>fecha_vencimiento</strong>: Fecha en formato YYYY-MM-DD (requerido)<br/>
-              • <strong>periodo</strong>: Periodo del vencimiento (opcional)<br/>
-              • <strong>descripcion</strong>: Descripción del vencimiento (opcional)
-            </p>
+            <div className="text-xs text-blue-700 space-y-1">
+              <p><strong>Columnas requeridas:</strong></p>
+              <ul className="ml-4 space-y-1">
+                <li>• <strong>impuesto_codigo</strong>: Código del impuesto (requerido)</li>
+                <li>• <strong>anio_fiscal</strong>: Año fiscal (requerido)</li>
+                <li>• <strong>periodo</strong>: Código del período (ej: B1, 01, vacío para anual)</li>
+                <li>• <strong>descripcion</strong>: Descripción completa del vencimiento (requerido)</li>
+                <li>• <strong>depende_nit</strong>: true/false si depende del NIT (requerido)</li>
+                <li>• <strong>tipo_dependencia_nit</strong>: "ultimo_digito" o "dos_ultimos_digitos" (requerido si depende_nit=true)</li>
+                <li>• <strong>digito</strong>: Dígito específico del NIT (0-9 para ultimo_digito, 00-99 para dos_ultimos_digitos)</li>
+                <li>• <strong>fecha_vencimiento</strong>: Fecha específica en formato YYYY-MM-DD o dd/mm/yyyy (requerido)</li>
+              </ul>
+              <p className="mt-2">
+                <strong>Estructura:</strong> Una fila por cada combinación de período + dígito del NIT.
+                Para un impuesto bimestral con último dígito, necesitarás 6 períodos × 10 dígitos = 60 filas.
+              </p>
+              <p className="mt-2">
+                <strong>Ejemplo para IVA Bimestral - Bimestre 1:</strong>
+              </p>
+              <div className="ml-4 bg-blue-100 p-2 rounded text-xs font-mono">
+                IVA,2024,B1,IVA Bimestral - Bimestre 1 2024,true,ultimo_digito,0,2024-02-15<br/>
+                IVA,2024,B1,IVA Bimestral - Bimestre 1 2024,true,ultimo_digito,1,15/02/2024<br/>
+                IVA,2024,B1,IVA Bimestral - Bimestre 1 2024,true,ultimo_digito,2,2024-02-17<br/>
+                ... (y así para cada dígito del 0 al 9)
+              </div>
+            </div>
             <div className="mt-3 flex gap-2">
               <button
-                onClick={() => downloadTemplate('csv')}
-                className="inline-flex items-center px-3 py-2 border border-blue-300 shadow-sm text-sm leading-4 font-medium rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                📥 CSV
-              </button>
-              <button
-                onClick={() => downloadTemplate('xlsx')}
+                onClick={() => downloadTemplate()}
                 className="inline-flex items-center px-3 py-2 border border-green-300 shadow-sm text-sm leading-4 font-medium rounded-md text-green-700 bg-green-50 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
               >
-                📊 Excel
+                📊 Descargar Plantilla Excel
               </button>
             </div>
           </div>
@@ -724,11 +978,11 @@ export default function ImpuestosPage() {
           {/* Selector de archivo */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-black mb-2">
-              Seleccionar archivo CSV o Excel
+              Seleccionar archivo Excel
             </label>
             <input
               type="file"
-              accept=".csv,.xlsx,.xls"
+              accept=".xlsx,.xls"
               onChange={handleFileChange}
               className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
             />
@@ -758,25 +1012,31 @@ export default function ImpuestosPage() {
                     <tr className="border-b border-green-200">
                       <th className="text-left py-1 px-2">Impuesto</th>
                       <th className="text-left py-1 px-2">Año</th>
-                      <th className="text-left py-1 px-2">Fecha</th>
                       <th className="text-left py-1 px-2">Periodo</th>
                       <th className="text-left py-1 px-2">Descripción</th>
+                      <th className="text-left py-1 px-2">Depende NIT</th>
+                      <th className="text-left py-1 px-2">Tipo</th>
+                      <th className="text-left py-1 px-2">Dígito</th>
+                      <th className="text-left py-1 px-2">Fecha</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {csvData.slice(0, 5).map((row, index) => (
+                    {csvData.slice(0, 10).map((row, index) => (
                       <tr key={index} className="border-b border-green-100">
                         <td className="py-1 px-2">{row.impuesto_codigo}</td>
                         <td className="py-1 px-2">{row.anio_fiscal}</td>
-                        <td className="py-1 px-2">{row.fecha_vencimiento}</td>
                         <td className="py-1 px-2">{row.periodo || '-'}</td>
                         <td className="py-1 px-2">{row.descripcion || '-'}</td>
+                        <td className="py-1 px-2">{row.depende_nit ? 'Sí' : 'No'}</td>
+                        <td className="py-1 px-2">{row.tipo_dependencia_nit || '-'}</td>
+                        <td className="py-1 px-2">{row.digito || '-'}</td>
+                        <td className="py-1 px-2">{row.fecha_vencimiento || '-'}</td>
                       </tr>
                     ))}
-                    {csvData.length > 5 && (
+                    {csvData.length > 10 && (
                       <tr>
-                        <td colSpan={5} className="py-1 px-2 text-center text-gray-500">
-                          ... y {csvData.length - 5} registros más
+                        <td colSpan={8} className="py-1 px-2 text-center text-gray-500">
+                          ... y {csvData.length - 10} registros más
                         </td>
                       </tr>
                     )}
@@ -793,7 +1053,7 @@ export default function ImpuestosPage() {
               disabled={csvData.length === 0 || uploadingCSV}
               className="bg-orange-600 text-white px-6 py-2 rounded-md hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              {uploadingCSV ? 'Subiendo...' : `Subir ${csvData.length} Vencimientos`}
+              {uploadingCSV ? 'Subiendo...' : `Subir ${csvData.length} Configuración(es)`}
             </button>
             <button
               type="button"
@@ -822,7 +1082,7 @@ export default function ImpuestosPage() {
             <select
               value={selectedYear}
               onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
             >
               {Array.from({ length: 10 }, (_, i) => {
                 const year = new Date().getFullYear() - 2 + i;
@@ -841,7 +1101,7 @@ export default function ImpuestosPage() {
             <select
               value={selectedImpuestoFilter || ''}
               onChange={(e) => setSelectedImpuestoFilter(e.target.value ? parseInt(e.target.value) : null)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
             >
               <option value="">Todos los impuestos</option>
               {impuestos && impuestos
@@ -893,6 +1153,18 @@ export default function ImpuestosPage() {
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${getPeriodicidadColor(impuesto.periodicidad)}`}>
                         {impuesto.periodicidad}
                       </span>
+                      <button
+                        onClick={() => abrirEditarImpuesto(impuesto)}
+                        className="px-3 py-1 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => eliminarImpuesto(impuesto.id)}
+                        className="px-3 py-1 text-xs bg-red-600 text-white rounded-md hover:bg-red-700"
+                      >
+                        Eliminar
+                      </button>
                     </div>
                   </div>
                   {impuesto.descripcion && (
@@ -908,24 +1180,77 @@ export default function ImpuestosPage() {
 
                   {vencimientosImpuesto.length > 0 ? (
                     <div className="space-y-3">
-                      {vencimientosImpuesto.map((vencimiento) => (
-                        <div key={vencimiento.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-                          <div className="flex items-center space-x-4">
-                            <div className="text-sm font-medium text-black">
-                              {vencimiento.anio_fiscal}
-                              {vencimiento.periodo && ` - ${vencimiento.periodo}`}
+                      {vencimientosImpuesto.map((vencimiento) => {
+                        const isExpanded = expandedVencimientos.has(vencimiento.id);
+                        return (
+                          <div key={vencimiento.id} className="border border-gray-200 rounded-md overflow-hidden">
+                            {/* Header del vencimiento - clickeable */}
+                            <div 
+                              className="flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 cursor-pointer"
+                              onClick={() => toggleVencimientoExpansion(vencimiento.id)}
+                            >
+                              <div className="flex items-center space-x-4">
+                                <div className="flex items-center space-x-2">
+                                  <span className={`transform transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                                    ▶
+                                  </span>
+                                  <div className="text-sm font-medium text-black">
+                                    {vencimiento.anio_fiscal}
+                                    {vencimiento.periodo && ` - ${vencimiento.periodo}`}
+                                  </div>
+                                </div>
+                                <div className="text-sm text-black">
+                                  {vencimiento.depende_nit ? (
+                                    <span className="text-purple-600 font-medium">
+                                      {vencimiento.tipo_dependencia_nit === 'ultimo_digito' ? 'Por último dígito' : 'Por dos últimos dígitos'}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-500">Sin dependencia NIT</span>
+                                  )}
+                                </div>
+                              </div>
+                              {vencimiento.descripcion && (
+                                <div className="text-sm text-gray-500 max-w-md truncate">
+                                  {vencimiento.descripcion}
+                                </div>
+                              )}
                             </div>
-                            <div className="text-sm text-black">
-                              {formatDate(vencimiento.fecha_vencimiento)}
-                            </div>
+
+                            {/* Detalles expandidos */}
+                            {isExpanded && vencimiento.depende_nit && vencimiento.fechas_por_digito && (
+                              <div className="p-4 bg-white border-t border-gray-200">
+                                <h5 className="text-sm font-medium text-black mb-3">
+                                  Fechas de vencimiento por {vencimiento.tipo_dependencia_nit === 'ultimo_digito' ? 'último dígito' : 'dos últimos dígitos'} del NIT:
+                                </h5>
+                                <div className={`grid gap-2 ${
+                                  vencimiento.tipo_dependencia_nit === 'ultimo_digito' 
+                                    ? 'grid-cols-2 md:grid-cols-5' 
+                                    : 'grid-cols-2 md:grid-cols-4 lg:grid-cols-6'
+                                }`}>
+                                  {Object.entries(vencimiento.fechas_por_digito)
+                                    .sort(([a], [b]) => {
+                                      if (vencimiento.tipo_dependencia_nit === 'ultimo_digito') {
+                                        return parseInt(a) - parseInt(b);
+                                      } else {
+                                        return a.localeCompare(b);
+                                      }
+                                    })
+                                    .map(([digito, fecha]) => (
+                                      <div key={digito} className="flex items-center justify-between p-2 bg-gray-50 rounded text-xs">
+                                        <span className="font-medium text-black">
+                                          {vencimiento.tipo_dependencia_nit === 'ultimo_digito' ? `Dígito ${digito}` : `Dígitos ${digito}`}
+                                        </span>
+                                        <span className="text-gray-600">
+                                          {formatDate(fecha)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          {vencimiento.descripcion && (
-                            <div className="text-sm text-gray-500 max-w-md truncate">
-                              {vencimiento.descripcion}
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="text-center py-8 text-gray-500">
