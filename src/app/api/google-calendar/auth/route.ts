@@ -3,7 +3,7 @@ import { GoogleCalendarService } from '@/services/googleCalendarService';
 
 export async function GET() {
   try {
-    const calendarService = new GoogleCalendarService();
+    const calendarService = await GoogleCalendarService.getInstance();
     const authUrl = calendarService.generateAuthUrl();
 
     return NextResponse.json({
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const calendarService = new GoogleCalendarService();
+    const calendarService = await GoogleCalendarService.getInstance();
     const result = await calendarService.setTokens(code);
 
     if (result.success) {

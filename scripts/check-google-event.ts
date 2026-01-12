@@ -5,7 +5,7 @@ async function checkGoogleEvent() {
   try {
     console.log('Verificando evento en Google Calendar...');
 
-    const calendarService = new GoogleCalendarService();
+    const calendarService = await GoogleCalendarService.getInstance();
 
     // Intentar obtener el evento (aunque no tengamos método directo, podemos probar la conexión)
     const connectionResult = await calendarService.testConnection();

@@ -85,7 +85,7 @@ async function setupGoogleOAuth() {
   try {
     // Importar dinámicamente para evitar problemas de compilación
     const { GoogleCalendarService } = await import('../src/services/googleCalendarService.js');
-    const calendarService = new GoogleCalendarService();
+    const calendarService = await GoogleCalendarService.getInstance();
 
     // Verificar si ya tenemos tokens
     const statusResult = await calendarService.testConnection();

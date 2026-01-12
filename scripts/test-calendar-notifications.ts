@@ -2,7 +2,7 @@ import { GoogleCalendarService } from '../src/services/googleCalendarService';
 import { query } from '../src/lib/database';
 
 async function testCalendarEventWithNotifications() {
-  const calendarService = new GoogleCalendarService();
+  const calendarService = await GoogleCalendarService.getInstance();
   
   try {
     console.log('Testing Google Calendar event creation with notifications...');

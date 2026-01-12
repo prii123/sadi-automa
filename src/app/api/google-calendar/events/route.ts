@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Crear el servicio de Google Calendar
-    const calendarService = new GoogleCalendarService();
+    const calendarService = await GoogleCalendarService.getInstance();
 
     // Verificar estado de tokens antes de proceder
     console.log('🔍 Verificando tokens antes de crear evento...');

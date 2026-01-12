@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Intercambiar el código por tokens
-    const calendarService = new GoogleCalendarService();
+    const calendarService = await GoogleCalendarService.getInstance();
     const result = await calendarService.setTokens(code);
 
     if (result.success) {
