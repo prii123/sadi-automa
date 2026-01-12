@@ -28,7 +28,7 @@ export interface VencimientoImpuesto {
 export interface CalendarioTributario {
   id: number;
   empresa_id: number;
-  vencimiento_impuesto_id: number;
+  vencimiento_impuesto_id?: number; // Opcional hasta que se migre
   fecha_vencimiento: Date;
   periodo: string;
   estado: 'pendiente' | 'pagado' | 'vencido' | 'extemporaneo';
@@ -190,44 +190,46 @@ export class CalendarioTributarioService {
 
       const nitEmpresa = empresaQuery.rows[0].nit;
 
-      // Obtener todos los vencimientos fiscales activos para el año
+      // Obtener todos los vencimientos fiscales activos para el año SOLO de impuestos asignados a la empresa
       const vencimientosQuery = await this.client.query(`
         SELECT vi.*, i.nombre, i.codigo, i.periodicidad, i.tipo
         FROM vencimientos_impuestos vi
         JOIN impuestos i ON vi.impuesto_id = i.id
+        JOIN empresa_impuestos ei ON ei.impuesto_id = i.id
         WHERE vi.activo = true AND i.activo = true AND vi.anio_fiscal = $1
-      `, [year]);
+          AND ei.empresa_id = $2 AND ei.activo = true
+      `, [year, empresaId]);
 
       const vencimientos = vencimientosQuery.rows;
 
       // Para cada vencimiento, calcular fecha ajustada y crear entrada en calendario
       for (const vencimiento of vencimientos) {
-        const fechaVencimientoAjustada = this.calcularFechaVencimientoAjustada({
-          ...vencimiento,
-          fecha_vencimiento: new Date(vencimiento.fecha_vencimiento),
-          impuesto: {
-            id: vencimiento.impuesto_id,
-            nombre: vencimiento.nombre,
-            codigo: vencimiento.codigo,
-            tipo: vencimiento.tipo,
-            periodicidad: vencimiento.periodicidad,
-            descripcion: '',
-            activo: true
-          }
-        }, nitEmpresa);
+        const fechaVencimientoAjustada = this.calcularFechaVencimientoAjustada(vencimiento, nitEmpresa);
 
-        const periodoCompleto = vencimiento.periodo
-          ? `${year}-${vencimiento.periodo}`
-          : year.toString();
+        // Solo crear entrada si hay una fecha de vencimiento calculada
+        if (fechaVencimientoAjustada) {
+          const periodoCompleto = vencimiento.periodo
+            ? `${year}-${vencimiento.periodo}`
+            : year.toString();
 
-        // Insertar o actualizar en calendario_tributario
-        await this.client.query(
-          `INSERT INTO calendario_tributario (empresa_id, impuesto_id, fecha_vencimiento, periodo, estado)
-           VALUES ($1, $2, $3, $4, 'pendiente')
-           ON CONFLICT (empresa_id, impuesto_id, periodo)
-           DO UPDATE SET fecha_vencimiento = EXCLUDED.fecha_vencimiento`,
-          [empresaId, vencimiento.impuesto_id, fechaVencimientoAjustada, periodoCompleto]
-        );
+          // Insertar o actualizar en calendario_tributario
+          // Usar vencimiento_impuesto_id si está disponible, sino usar impuesto_id
+          const insertQuery = vencimiento.id ?
+            `INSERT INTO calendario_tributario (empresa_id, vencimiento_impuesto_id, impuesto_id, fecha_vencimiento, periodo, estado)
+             VALUES ($1, $2, $3, $4, $5, 'pendiente')
+             ON CONFLICT (empresa_id, vencimiento_impuesto_id, periodo)
+             DO UPDATE SET fecha_vencimiento = EXCLUDED.fecha_vencimiento` :
+            `INSERT INTO calendario_tributario (empresa_id, impuesto_id, fecha_vencimiento, periodo, estado)
+             VALUES ($1, $2, $3, $4, 'pendiente')
+             ON CONFLICT (empresa_id, impuesto_id, periodo)
+             DO UPDATE SET fecha_vencimiento = EXCLUDED.fecha_vencimiento`;
+
+          const params = vencimiento.id ?
+            [empresaId, vencimiento.id, vencimiento.impuesto_id, fechaVencimientoAjustada, periodoCompleto] :
+            [empresaId, vencimiento.impuesto_id, fechaVencimientoAjustada, periodoCompleto];
+
+          await this.client.query(insertQuery, params);
+        }
       }
 
       console.log(`✅ Calendario tributario generado para empresa ${empresaId} - año ${year}`);
@@ -243,16 +245,15 @@ export class CalendarioTributarioService {
   async obtenerCalendarioEmpresa(empresaId: number, year?: number): Promise<CalendarioTributario[]> {
     try {
       let query = `
-        SELECT ct.*, vi.fecha_vencimiento as vencimiento_base,
+        SELECT ct.*,
                i.nombre as impuesto_nombre, i.codigo as impuesto_codigo,
                i.tipo as tipo_impuesto, i.periodicidad,
-               vi.anio_fiscal, vi.periodo as periodo_impuesto, vi.descripcion as vencimiento_descripcion
+               vi.anio_fiscal, vi.periodo as periodo_impuesto, vi.descripcion as vencimiento_descripcion,
+               vi.fechas_por_digito
         FROM calendario_tributario ct
+        JOIN empresa_impuestos ei ON ei.empresa_id = ct.empresa_id AND ei.impuesto_id = ct.impuesto_id AND ei.activo = true
         JOIN impuestos i ON ct.impuesto_id = i.id
-        LEFT JOIN vencimientos_impuestos vi ON vi.impuesto_id = ct.impuesto_id
-          AND vi.anio_fiscal = EXTRACT(YEAR FROM ct.fecha_vencimiento)
-          AND vi.periodo = ct.periodo
-          AND vi.activo = true
+        LEFT JOIN vencimientos_impuestos vi ON vi.id = ct.vencimiento_impuesto_id
         WHERE ct.empresa_id = $1
       `;
       const params = [empresaId];

@@ -14,6 +14,7 @@ export interface Empresa {
   nombre: string;
   tipo: string;
   estado: string; // "activo" por defecto
+  contador_id?: number;
   certificado: ModuloEmpresa;
   resolucion: ModuloEmpresa;
   documento: ModuloEmpresa;

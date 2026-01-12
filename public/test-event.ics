@@ -1,0 +1,29 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//SADI//Calendario Tributario//ES
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:sadi-test-2025-01-11@sadi-app.com
+DTSTART;TZID=America/Bogota:20250111T090000
+DTEND;TZID=America/Bogota:20250111T100000
+DTSTAMP:20250110T120000Z
+SUMMARY:🧪 Prueba SADI - Vencimiento Tributario
+DESCRIPTION:Esta es una prueba de integración de Google Calendar con SADI\n\nEmpresa: Empresa de Prueba\nImpuesto: IVA\nPeriodo: Enero 2025\nFecha de prueba: 2025-01-11\n\nSi ves este evento en tu Google Calendar\, ¡la integración funciona correctamente!
+LOCATION:Oficina Virtual - SADI
+STATUS:CONFIRMED
+SEQUENCE:0
+ORGANIZER;CN=SADI:mailto:sadi.automatizaciones@gmail.com
+ATTENDEE;CN=SADI:mailto:sadi.automatizaciones@gmail.com
+BEGIN:VALARM
+TRIGGER:-PT24H
+ACTION:DISPLAY
+DESCRIPTION:Recordatorio: 🧪 Prueba SADI - Vencimiento Tributario
+END:VALARM
+BEGIN:VALARM
+TRIGGER:-PT1H
+ACTION:DISPLAY
+DESCRIPTION:Recordatorio final: 🧪 Prueba SADI - Vencimiento Tributario
+END:VALARM
+END:VEVENT
+END:VCALENDAR

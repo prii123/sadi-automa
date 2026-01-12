@@ -56,7 +56,7 @@ export class EmpresaService {
   static async getByNit(nit: string): Promise<{ success: boolean; data?: Empresa; error?: string }> {
     const client = await pool.connect();
     try {
-      const query = 'SELECT id, nit, nombre, tipo, estado FROM empresas WHERE nit = $1';
+      const query = 'SELECT id, nit, nombre, tipo, estado, contador_id FROM empresas WHERE nit = $1';
       const result = await client.query(query, [nit]);
 
       if (result.rows.length === 0) {
@@ -70,6 +70,7 @@ export class EmpresaService {
         nombre: row.nombre,
         tipo: row.tipo,
         estado: row.estado,
+        contador_id: row.contador_id,
         certificado: { activo: 0, renovado: 0, facturado: 0 },
         resolucion: { activo: 0, renovado: 0, facturado: 0 },
         documento: { activo: 0, renovado: 0, facturado: 0 }
@@ -89,7 +90,7 @@ export class EmpresaService {
   static async getAll(): Promise<{ success: boolean; data?: Empresa[]; error?: string }> {
     const client = await pool.connect();
     try {
-      const query = 'SELECT id, nit, nombre, tipo, estado FROM empresas ORDER BY nombre';
+      const query = 'SELECT id, nit, nombre, tipo, estado, contador_id FROM empresas ORDER BY nombre';
       const result = await client.query(query);
 
       const empresas: Empresa[] = result.rows.map(row => ({
@@ -98,6 +99,7 @@ export class EmpresaService {
         nombre: row.nombre,
         tipo: row.tipo,
         estado: row.estado,
+        contador_id: row.contador_id,
         certificado: { activo: 0, renovado: 0, facturado: 0 },
         resolucion: { activo: 0, renovado: 0, facturado: 0 },
         documento: { activo: 0, renovado: 0, facturado: 0 }

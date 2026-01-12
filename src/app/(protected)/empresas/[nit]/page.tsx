@@ -21,6 +21,21 @@ export default function EmpresaDetailPage() {
   const [showResolucionForm, setShowResolucionForm] = useState(false);
   const [showDocumentoForm, setShowDocumentoForm] = useState(false);
 
+  // Estados para información de contacto
+  const [contactoForm, setContactoForm] = useState({
+    telefono: '',
+    email: '',
+    direccion: '',
+    persona_contacto: ''
+  });
+  const [showContactoForm, setShowContactoForm] = useState(false);
+
+  // Estados para asignar contador
+  const [contadores, setContadores] = useState<any[]>([]);
+  const [selectedContador, setSelectedContador] = useState<number | null>(null);
+  const [showAsignarContador, setShowAsignarContador] = useState(false);
+  const [currentContador, setCurrentContador] = useState<any>(null);
+
   const [certificadoForm, setCertificadoForm] = useState({
     fecha_inicio: '',
     fecha_final: '',
@@ -46,6 +61,7 @@ export default function EmpresaDetailPage() {
   useEffect(() => {
     if (nit) {
       fetchEmpresaData();
+      fetchContactoData();
     }
   }, [nit]);
 
@@ -58,6 +74,24 @@ export default function EmpresaDetailPage() {
       const empresaData = await empresaResponse.json();
       if (empresaData.success) {
         setEmpresa(empresaData.data);
+        // console.log('Empresa cargada:', empresaData.data);
+
+        // Cargar contador asignado si existe
+        if (empresaData.data.contador_id) {
+          // console.log('Cargando contador con ID:', empresaData.data.contador_id);
+          const contadorResponse = await fetch(`/api/usuarios/${empresaData.data.contador_id}`);
+          const contadorData = await contadorResponse.json();
+          // console.log('Respuesta contador:', contadorData);
+          if (contadorData.success) {
+            setCurrentContador(contadorData.data);
+            // console.log('Contador asignado:', contadorData.data);
+          } else {
+            // console.error('Error cargando contador:', contadorData.error);
+          }
+        } else {
+          // console.log('No hay contador asignado');
+          setCurrentContador(null);
+        }
       }
 
       // Cargar certificados
@@ -85,6 +119,23 @@ export default function EmpresaDetailPage() {
       console.error('Error cargando datos de la empresa:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchContactoData = async () => {
+    try {
+      const response = await fetch(`/api/empresas/${nit}/contacto`);
+      const data = await response.json();
+      if (data.success && data.contacto) {
+        setContactoForm({
+          telefono: data.contacto.telefono || '',
+          email: data.contacto.email || '',
+          direccion: data.contacto.direccion || '',
+          persona_contacto: data.contacto.persona_contacto || ''
+        });
+      }
+    } catch (error) {
+      console.error('Error cargando información de contacto:', error);
     }
   };
 
@@ -214,6 +265,75 @@ export default function EmpresaDetailPage() {
     }
   };
 
+  // Funciones para información de contacto
+  const handleContactoSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await fetch(`/api/empresas/${nit}/contacto`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contactoForm)
+      });
+
+      if (response.ok) {
+        setShowContactoForm(false);
+        alert('Información de contacto guardada exitosamente');
+        // Recargar la información de contacto
+        fetchContactoData();
+      }
+    } catch (error) {
+      console.error('Error guardando información de contacto:', error);
+      alert('Error guardando información de contacto');
+    }
+  };
+
+  // Funciones para asignar contador
+  const loadContadores = async () => {
+    try {
+      const response = await fetch('/api/usuarios');
+      const data = await response.json();
+      if (data.success) {
+        setContadores(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error cargando usuarios:', error);
+    }
+  };
+
+  const handleAsignarContador = async () => {
+    if (!selectedContador) return;
+
+    // console.log('Asignando contador:', selectedContador);
+
+    try {
+      const response = await fetch(`/api/empresas/${nit}/contador`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contador_id: selectedContador })
+      });
+
+      // console.log('Respuesta del API:', response.status);
+
+      if (response.ok) {
+        const data = await response.json();
+        // console.log('Datos de respuesta:', data);
+        setShowAsignarContador(false);
+        setSelectedContador(null);
+        alert('Usuario asignado exitosamente');
+        // Recargar la información de la empresa y contador
+        // console.log('Recargando datos...');
+        await fetchEmpresaData();
+        // console.log('Datos recargados');
+      } else {
+        const errorData = await response.json();
+        // console.error('Error en respuesta:', errorData);
+      }
+    } catch (error) {
+      // console.error('Error asignando usuario:', error);
+      alert('Error asignando usuario');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -271,6 +391,168 @@ export default function EmpresaDetailPage() {
 
       {/* Contenido principal */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Información de Contacto */}
+        <div className="bg-white shadow rounded-lg mb-6">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-medium text-gray-900">Información de Contacto</h2>
+              <button
+                onClick={() => setShowContactoForm(!showContactoForm)}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm"
+              >
+                {showContactoForm ? 'Cancelar' : '+ Agregar Contacto'}
+              </button>
+            </div>
+          </div>
+
+          {showContactoForm ? (
+            <div className="px-6 py-4">
+              <form onSubmit={handleContactoSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-900">Teléfono</label>
+                  <input
+                    type="tel"
+                    value={contactoForm.telefono}
+                    onChange={(e) => setContactoForm({...contactoForm, telefono: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                    placeholder="Ej: +57 300 123 4567"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-900">Email</label>
+                  <input
+                    type="email"
+                    value={contactoForm.email}
+                    onChange={(e) => setContactoForm({...contactoForm, email: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                    placeholder="contacto@empresa.com"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-900">Dirección</label>
+                  <input
+                    type="text"
+                    value={contactoForm.direccion}
+                    onChange={(e) => setContactoForm({...contactoForm, direccion: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                    placeholder="Calle 123 #45-67, Ciudad"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-900">Persona de Contacto</label>
+                  <input
+                    type="text"
+                    value={contactoForm.persona_contacto}
+                    onChange={(e) => setContactoForm({...contactoForm, persona_contacto: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                    placeholder="Nombre del contacto"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <button
+                    type="submit"
+                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                  >
+                    Guardar Información de Contacto
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : (
+            <div className="px-6 py-4">
+              {contactoForm.telefono || contactoForm.email || contactoForm.direccion || contactoForm.persona_contacto ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {contactoForm.telefono && (
+                    <div>
+                      <span className="text-sm font-medium text-gray-900">Teléfono:</span>
+                      <p className="text-sm text-gray-900">{contactoForm.telefono}</p>
+                    </div>
+                  )}
+                  {contactoForm.email && (
+                    <div>
+                      <span className="text-sm font-medium text-gray-900">Email:</span>
+                      <p className="text-sm text-gray-900">{contactoForm.email}</p>
+                    </div>
+                  )}
+                  {contactoForm.direccion && (
+                    <div>
+                      <span className="text-sm font-medium text-gray-900">Dirección:</span>
+                      <p className="text-sm text-gray-900">{contactoForm.direccion}</p>
+                    </div>
+                  )}
+                  {contactoForm.persona_contacto && (
+                    <div>
+                      <span className="text-sm font-medium text-gray-900">Persona de Contacto:</span>
+                      <p className="text-sm text-gray-900">{contactoForm.persona_contacto}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">No hay información de contacto registrada.</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Asignación de Contador */}
+        <div className="bg-white shadow rounded-lg mb-6">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-medium text-gray-900">Contador Asignado</h2>
+              <button
+                onClick={() => {
+                  setShowAsignarContador(!showAsignarContador);
+                  if (!showAsignarContador) loadContadores();
+                }}
+                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm"
+              >
+                {showAsignarContador ? 'Cancelar' : (currentContador ? 'Cambiar Contador' : '+ Asignar Contador')}
+              </button>
+            </div>
+          </div>
+
+          {/* Mostrar contador actual */}
+          <div className="px-6 py-4">
+            {currentContador ? (
+              <div className="mb-4">
+                <h3 className="text-sm font-medium text-gray-900">Contador Actual:</h3>
+                <p className="text-sm text-gray-900">{currentContador.nombre} {currentContador.apellido} - {currentContador.email}</p>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 mb-4">No hay contador asignado</p>
+            )}
+          </div>
+
+          {showAsignarContador && (
+            <div className="px-6 py-4">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-900 mb-2">Seleccionar Contador</label>
+                  <select
+                    value={selectedContador || ''}
+                    onChange={(e) => setSelectedContador(Number(e.target.value))}
+                    className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                  >
+                    <option value="">Seleccione un contador...</option>
+                    {contadores.map((contador: any) => (
+                      <option key={contador.id} value={contador.id}>
+                        {contador.nombre} {contador.apellido} - {contador.email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={handleAsignarContador}
+                  disabled={!selectedContador}
+                  className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Asignar Contador
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Tabs */}
         <div className="mb-8">
           <nav className="flex space-x-8" aria-label="Tabs">
