@@ -2,6 +2,7 @@ import { google } from 'googleapis';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
+import { query } from '../lib/database';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -31,27 +32,61 @@ export class GoogleCalendarService {
     );
 
     // Cargar tokens si existen
-    this.loadTokens();
+    this.loadTokens().catch(error => {
+      console.error('Error inicializando tokens:', error);
+    });
 
     this.calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
   }
 
-  private loadTokens() {
+  private async loadTokens() {
     try {
-      const tokenPath = path.join(process.cwd(), 'token.json');
-      if (fs.existsSync(tokenPath)) {
-        const tokens = JSON.parse(fs.readFileSync(tokenPath, 'utf8'));
-        this.oauth2Client.setCredentials(tokens);
+      const result = await query('SELECT config_value FROM google_calendar_config WHERE config_key = $1', ['oauth_tokens']);
+      if (result.rows.length > 0 && result.rows[0].config_value) {
+        const tokens = JSON.parse(result.rows[0].config_value);
+        if (tokens && Object.keys(tokens).length > 0) {
+          this.oauth2Client.setCredentials(tokens);
+          console.log('Tokens cargados desde la base de datos');
+        } else {
+          console.log('No se encontraron tokens guardados. Se requiere autorización inicial.');
+        }
+      } else {
+        console.log('No se encontraron tokens guardados. Se requiere autorización inicial.');
       }
     } catch (error) {
-      console.log('No se encontraron tokens guardados. Se requiere autorización inicial.');
+      console.error('Error cargando tokens desde la base de datos:', error);
+      // Fallback: intentar cargar desde archivo si existe (para compatibilidad)
+      try {
+        const tokenPath = path.join(process.cwd(), 'token.json');
+        if (fs.existsSync(tokenPath)) {
+          const tokens = JSON.parse(fs.readFileSync(tokenPath, 'utf8'));
+          this.oauth2Client.setCredentials(tokens);
+          console.log('Tokens cargados desde archivo token.json (fallback)');
+        }
+      } catch (fallbackError) {
+        console.log('No se encontraron tokens guardados. Se requiere autorización inicial.');
+      }
     }
   }
 
-  private saveTokens(tokens: any) {
-    const tokenPath = path.join(process.cwd(), 'token.json');
-    fs.writeFileSync(tokenPath, JSON.stringify(tokens, null, 2));
-    console.log('Tokens guardados en token.json');
+  private async saveTokens(tokens: any) {
+    try {
+      await query(
+        'UPDATE google_calendar_config SET config_value = $1, updated_at = CURRENT_TIMESTAMP WHERE config_key = $2',
+        [JSON.stringify(tokens, null, 2), 'oauth_tokens']
+      );
+      console.log('Tokens guardados en la base de datos');
+    } catch (error) {
+      console.error('Error guardando tokens en la base de datos:', error);
+      // Fallback: intentar guardar en archivo
+      try {
+        const tokenPath = path.join(process.cwd(), 'token.json');
+        fs.writeFileSync(tokenPath, JSON.stringify(tokens, null, 2));
+        console.log('Tokens guardados en token.json (fallback)');
+      } catch (fallbackError) {
+        console.error('Error guardando tokens en archivo fallback:', fallbackError);
+      }
+    }
   }
 
   /**
@@ -72,7 +107,7 @@ export class GoogleCalendarService {
     try {
       const { tokens } = await this.oauth2Client.getToken(code);
       this.oauth2Client.setCredentials(tokens);
-      this.saveTokens(tokens);
+      await this.saveTokens(tokens);
       return { success: true, message: 'Tokens configurados correctamente' };
     } catch (error) {
       console.error('Error configurando tokens:', error);
