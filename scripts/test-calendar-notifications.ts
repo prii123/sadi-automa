@@ -53,13 +53,10 @@ async function testCalendarEventWithNotifications() {
       startDate: startDate,
       endDate: startDate, // Same day
       attendees: attendees,
-      reminders: {
-        useDefault: false,
-        overrides: [
-          { method: 'email', minutes: 24 * 60 }, // 24 hours before
-          { method: 'popup', minutes: 10 },
-        ],
-      },
+      reminders: [
+        { minutes: 24 * 60 }, // 24 hours before (email)
+        { minutes: 10 }, // 10 minutes before (popup)
+      ],
     };
 
     console.log('Creating event with attendees:', attendees.map(a => a.email));
@@ -71,14 +68,6 @@ async function testCalendarEventWithNotifications() {
       console.log('Event ID:', result.eventId);
       console.log('Event link:', result.htmlLink);
       console.log('Attendees should receive email invitations');
-
-      // Verify attendees in the created event
-      if (result.attendees) {
-        console.log('Event attendees:');
-        result.attendees.forEach((attendee: any) => {
-          console.log(`- ${attendee.email} (response: ${attendee.responseStatus})`);
-        });
-      }
     } else {
       console.error('Failed to create event:', result.error);
       if (result.authRequired) {
