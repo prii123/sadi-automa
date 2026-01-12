@@ -435,17 +435,27 @@ Generado automáticamente por SADI`;
         })
       });
 
+      if (!response.ok) {
+        // Si es error 401, verificar si requiere autorización
+        if (response.status === 401) {
+          const errorData = await response.json();
+          if (errorData.authRequired && errorData.authUrl) {
+            setGoogleCalendarAuthUrl(errorData.authUrl);
+            setShowGoogleAuth(true);
+            setOauthMessage({ type: 'error', message: 'Se requiere reautorización de Google Calendar para sincronizar el evento.' });
+            return;
+          }
+        }
+        alert(`Error HTTP ${response.status} agendando evento`);
+        return;
+      }
+
       const data = await response.json();
       if (data.success) {
         alert('Evento agendado exitosamente en Google Calendar');
         await loadCalendario(); // Recargar para mostrar el estado actualizado
       } else {
-        // Si se requiere autorización, mostrar el mensaje correspondiente
-        if (data.authRequired) {
-          alert('Se requiere autorización de Google Calendar. Haz clic en "Autorizar Google Calendar" en la parte superior.');
-        } else {
-          alert('Error agendando evento: ' + data.error);
-        }
+        alert('Error agendando evento: ' + data.error);
       }
     } catch (error) {
       console.error('Error sincronizando con Google Calendar:', error);
@@ -462,17 +472,27 @@ Generado automáticamente por SADI`;
         method: 'DELETE'
       });
 
+      if (!response.ok) {
+        // Si es error 401, verificar si requiere autorización
+        if (response.status === 401) {
+          const errorData = await response.json();
+          if (errorData.authRequired && errorData.authUrl) {
+            setGoogleCalendarAuthUrl(errorData.authUrl);
+            setShowGoogleAuth(true);
+            setOauthMessage({ type: 'error', message: 'Se requiere reautorización de Google Calendar para eliminar el evento.' });
+            return;
+          }
+        }
+        alert(`Error HTTP ${response.status} eliminando evento`);
+        return;
+      }
+
       const data = await response.json();
       if (data.success) {
         alert('Evento eliminado exitosamente de Google Calendar');
         await loadCalendario(); // Recargar para mostrar el estado actualizado
       } else {
-        // Si se requiere autorización, mostrar el mensaje correspondiente
-        if (data.authRequired) {
-          alert('Se requiere autorización de Google Calendar. Haz clic en "Autorizar Google Calendar" en la parte superior.');
-        } else {
-          alert('Error eliminando evento: ' + data.error);
-        }
+        alert('Error eliminando evento: ' + data.error);
       }
     } catch (error) {
       console.error('Error eliminando evento de Google Calendar:', error);
@@ -519,12 +539,43 @@ Generado automáticamente por SADI`;
           })
         });
 
+        if (!response.ok) {
+          // Si es error 401, verificar si requiere autorización
+          if (response.status === 401) {
+            const errorData = await response.json();
+            return {
+              success: false,
+              authRequired: true,
+              authUrl: errorData.authUrl,
+              error: errorData.error,
+              eventId: evento.id
+            };
+          }
+          return {
+            success: false,
+            error: `Error HTTP ${response.status}`,
+            eventId: evento.id
+          };
+        }
+
         return response.json();
       });
 
       const results = await Promise.all(syncPromises);
       const successCount = results.filter(r => r.success).length;
-      const errorCount = results.length - successCount;
+      const authRequiredCount = results.filter(r => r.authRequired).length;
+      const errorCount = results.length - successCount - authRequiredCount;
+
+      if (authRequiredCount > 0) {
+        // Si algún evento requiere autorización, mostrar la interfaz de auth
+        const authResult = results.find(r => r.authRequired);
+        if (authResult && authResult.authUrl) {
+          setGoogleCalendarAuthUrl(authResult.authUrl);
+          setShowGoogleAuth(true);
+          setOauthMessage({ type: 'error', message: 'Se requiere reautorización de Google Calendar para sincronizar eventos.' });
+        }
+        return;
+      }
 
       if (successCount > 0) {
         alert(`${successCount} eventos sincronizados exitosamente en Google Calendar${errorCount > 0 ? `. ${errorCount} errores.` : ''}`);
@@ -553,12 +604,46 @@ Generado automáticamente por SADI`;
         const response = await fetch(`/api/google-calendar/events/${evento.id}`, {
           method: 'DELETE'
         });
-        return response.json();
+
+        if (!response.ok) {
+          // Si es error 401, verificar si requiere autorización
+          if (response.status === 401) {
+            const errorData = await response.json();
+            if (errorData.authRequired) {
+              return {
+                success: false,
+                authRequired: true,
+                authUrl: errorData.authUrl,
+                error: errorData.error,
+                eventId: evento.id
+              };
+            }
+          }
+          return {
+            success: false,
+            error: `Error HTTP ${response.status}`,
+            eventId: evento.id
+          };
+        }
+
+        return await response.json();
       });
 
       const results = await Promise.all(deletePromises);
       const successCount = results.filter(r => r.success).length;
-      const errorCount = results.length - successCount;
+      const authRequiredCount = results.filter(r => r.authRequired).length;
+      const errorCount = results.length - successCount - authRequiredCount;
+
+      if (authRequiredCount > 0) {
+        // Si algún evento requiere autorización, mostrar la interfaz de auth
+        const authResult = results.find(r => r.authRequired);
+        if (authResult && authResult.authUrl) {
+          setGoogleCalendarAuthUrl(authResult.authUrl);
+          setShowGoogleAuth(true);
+          setOauthMessage({ type: 'error', message: 'Se requiere reautorización de Google Calendar para eliminar eventos.' });
+        }
+        return;
+      }
 
       if (successCount > 0) {
         alert(`${successCount} eventos eliminados exitosamente de Google Calendar${errorCount > 0 ? `. ${errorCount} errores.` : ''}`);
