@@ -1,4 +1,4 @@
-import { Client } from 'pg';
+import { query } from '../lib/database';
 
 export interface Impuesto {
   id: number;
@@ -39,20 +39,18 @@ export interface CalendarioTributario {
 }
 
 export class CalendarioTributarioService {
-  private client: Client;
-
   constructor() {
-    this.client = new Client({
-      connectionString: process.env.DATABASE_URL,
-    });
+    // No necesitamos conexión manual, usamos el pool global
   }
 
   async connect() {
-    await this.client.connect();
+    // Método vacío para compatibilidad
+    return Promise.resolve();
   }
 
   async disconnect() {
-    await this.client.end();
+    // Método vacío para compatibilidad
+    return Promise.resolve();
   }
 
   /**
@@ -179,7 +177,7 @@ export class CalendarioTributarioService {
   async generarCalendarioEmpresa(empresaId: number, year: number = new Date().getFullYear()) {
     try {
       // Obtener NIT de la empresa
-      const empresaQuery = await this.client.query(
+      const empresaQuery = await query(
         'SELECT nit FROM empresas WHERE id = $1',
         [empresaId]
       );
@@ -191,7 +189,7 @@ export class CalendarioTributarioService {
       const nitEmpresa = empresaQuery.rows[0].nit;
 
       // Obtener todos los vencimientos fiscales activos para el año SOLO de impuestos asignados a la empresa
-      const vencimientosQuery = await this.client.query(`
+      const vencimientosQuery = await query(`
         SELECT vi.*, i.nombre, i.codigo, i.periodicidad, i.tipo
         FROM vencimientos_impuestos vi
         JOIN impuestos i ON vi.impuesto_id = i.id
@@ -228,7 +226,7 @@ export class CalendarioTributarioService {
             [empresaId, vencimiento.id, vencimiento.impuesto_id, fechaVencimientoAjustada, periodoCompleto] :
             [empresaId, vencimiento.impuesto_id, fechaVencimientoAjustada, periodoCompleto];
 
-          await this.client.query(insertQuery, params);
+          await query(insertQuery, params);
         }
       }
 
@@ -244,7 +242,7 @@ export class CalendarioTributarioService {
    */
   async obtenerCalendarioEmpresa(empresaId: number, year?: number): Promise<CalendarioTributario[]> {
     try {
-      let query = `
+      let sqlQuery = `
         SELECT ct.*,
                i.nombre as impuesto_nombre, i.codigo as impuesto_codigo,
                i.tipo as tipo_impuesto, i.periodicidad,
@@ -259,13 +257,13 @@ export class CalendarioTributarioService {
       const params = [empresaId];
 
       if (year) {
-        query += ' AND EXTRACT(YEAR FROM ct.fecha_vencimiento) = $2';
+        sqlQuery += ' AND EXTRACT(YEAR FROM ct.fecha_vencimiento) = $2';
         params.push(year);
       }
 
-      query += ' ORDER BY ct.fecha_vencimiento ASC';
+      sqlQuery += ' ORDER BY ct.fecha_vencimiento ASC';
 
-      const result = await this.client.query(query, params);
+      const result = await query(sqlQuery, params);
       return result.rows;
     } catch (error) {
       console.error('❌ Error obteniendo calendario:', error);
@@ -284,7 +282,7 @@ export class CalendarioTributarioService {
     observaciones?: string
   ) {
     try {
-      await this.client.query(
+      await query(
         `UPDATE calendario_tributario
          SET estado = $1, fecha_pago = $2, monto_pagado = $3, observaciones = $4, updated_at = CURRENT_TIMESTAMP
          WHERE id = $5`,
@@ -301,7 +299,7 @@ export class CalendarioTributarioService {
    */
   async obtenerVencimientosImpuestos(): Promise<VencimientoImpuesto[]> {
     try {
-      const result = await this.client.query(`
+      const result = await query(`
         SELECT vi.*, i.nombre as impuesto_nombre, i.codigo as impuesto_codigo,
                i.tipo as tipo_impuesto, i.periodicidad
         FROM vencimientos_impuestos vi
@@ -383,7 +381,7 @@ export class CalendarioTributarioService {
   ): Promise<VencimientoImpuesto> {
     try {
       // Verificar que el impuesto existe
-      const impuestoExists = await this.client.query(
+      const impuestoExists = await query(
         'SELECT id FROM impuestos WHERE id = $1 AND activo = true',
         [impuestoId]
       );
@@ -393,7 +391,7 @@ export class CalendarioTributarioService {
       }
 
       // Verificar que no exista un vencimiento duplicado
-      const existing = await this.client.query(
+      const existing = await query(
         'SELECT id FROM vencimientos_impuestos WHERE impuesto_id = $1 AND anio_fiscal = $2 AND periodo IS NOT DISTINCT FROM $3',
         [impuestoId, anioFiscal, periodo]
       );
@@ -403,7 +401,7 @@ export class CalendarioTributarioService {
       }
 
       // Crear el vencimiento
-      const result = await this.client.query(
+      const result = await query(
         `INSERT INTO vencimientos_impuestos (impuesto_id, anio_fiscal, periodo, descripcion, depende_nit, tipo_dependencia_nit, fechas_por_digito)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
@@ -438,7 +436,7 @@ export class CalendarioTributarioService {
     fechasPorDigito?: Record<string, string>
   ): Promise<VencimientoImpuesto> {
     try {
-      const result = await this.client.query(
+      const result = await query(
         `UPDATE vencimientos_impuestos
          SET descripcion = COALESCE($1, descripcion),
              depende_nit = COALESCE($2, depende_nit),
@@ -476,7 +474,7 @@ export class CalendarioTributarioService {
    */
   async desactivarVencimientoImpuesto(id: number): Promise<void> {
     try {
-      await this.client.query(
+      await query(
         'UPDATE vencimientos_impuestos SET activo = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
         [id]
       );
@@ -491,7 +489,7 @@ export class CalendarioTributarioService {
    */
   async obtenerVencimientosPorImpuesto(impuestoId: number): Promise<VencimientoImpuesto[]> {
     try {
-      const result = await this.client.query(`
+      const result = await query(`
         SELECT vi.*, i.nombre as impuesto_nombre, i.codigo as impuesto_codigo,
                i.tipo as tipo_impuesto, i.periodicidad
         FROM vencimientos_impuestos vi

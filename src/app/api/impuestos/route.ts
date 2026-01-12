@@ -1,21 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { CalendarioTributarioService } from '@/services/calendarioTributarioService';
+import { query } from '@/lib/database';
 
 export async function GET() {
   try {
-    const service = new CalendarioTributarioService();
-    await service.connect();
-
     // Obtener todos los impuestos activos
-    const client = await import('pg').then(pg => new pg.Client(process.env.DATABASE_URL));
-    await client.connect();
-
-    const result = await client.query(
+    const result = await query(
       'SELECT * FROM impuestos WHERE activo = true ORDER BY nombre'
     );
-
-    await client.end();
-    await service.disconnect();
 
     return NextResponse.json({
       success: true,

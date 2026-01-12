@@ -1,19 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { query } from '@/lib/database';
 
 export async function GET() {
   try {
-    const client = await import('pg').then(pg => new pg.Client(process.env.DATABASE_URL));
-    await client.connect();
-
-    const result = await client.query(`
+    const result = await query(`
       SELECT vi.*, i.nombre as impuesto_nombre, i.codigo as impuesto_codigo
       FROM vencimientos_impuestos vi
       JOIN impuestos i ON vi.impuesto_id = i.id
       WHERE vi.activo = true
       ORDER BY vi.anio_fiscal DESC, vi.periodo ASC
     `);
-
-    await client.end();
 
     return NextResponse.json({
       success: true,
