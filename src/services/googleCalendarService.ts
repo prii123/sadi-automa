@@ -31,6 +31,14 @@ export class GoogleCalendarService {
       redirectUri
     );
 
+    // Configurar el listener para guardar tokens cuando se refresquen automáticamente
+    this.oauth2Client.on('tokens', (tokens: any) => {
+      console.log('Tokens refrescados automáticamente, guardando en BD...');
+      this.saveTokens(tokens).catch(error => {
+        console.error('Error guardando tokens refrescados:', error);
+      });
+    });
+
     // Cargar tokens si existen
     this.loadTokens().catch(error => {
       console.error('Error inicializando tokens:', error);
@@ -71,9 +79,15 @@ export class GoogleCalendarService {
 
   private async saveTokens(tokens: any) {
     try {
+      // Si solo se están actualizando algunos tokens (como refresh), combinar con los existentes
+      let tokensToSave = tokens;
+      if (this.oauth2Client.credentials && Object.keys(tokens).length < Object.keys(this.oauth2Client.credentials).length) {
+        tokensToSave = { ...this.oauth2Client.credentials, ...tokens };
+      }
+
       await query(
         'UPDATE google_calendar_config SET config_value = $1, updated_at = CURRENT_TIMESTAMP WHERE config_key = $2',
-        [JSON.stringify(tokens, null, 2), 'oauth_tokens']
+        [JSON.stringify(tokensToSave, null, 2), 'oauth_tokens']
       );
       console.log('Tokens guardados en la base de datos');
     } catch (error) {

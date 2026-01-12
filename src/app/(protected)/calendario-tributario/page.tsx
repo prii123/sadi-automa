@@ -99,13 +99,6 @@ export default function CalendarioTributarioPage() {
     }
   }, [oauthMessage]);
 
-  // Efecto para verificar conexión cuando cambie el estado
-  useEffect(() => {
-    if (googleCalendarConnected === null) {
-      checkGoogleCalendarConnection();
-    }
-  }, [googleCalendarConnected]);
-
   // Estados para formularios
   const [showCreateImpuesto, setShowCreateImpuesto] = useState(false);
   const [showCreateVencimiento, setShowCreateVencimiento] = useState(false);
@@ -138,36 +131,24 @@ export default function CalendarioTributarioPage() {
         setSelectedEmpresa(parseInt(empresaId));
       }
 
-      // Verificar conexión de Google Calendar al cargar la página
-      await checkGoogleCalendarConnection();
-
-      // Manejar parámetros de OAuth callback
+      // Manejar parámetros de OAuth callback primero
       const success = searchParams.get('success');
       const error = searchParams.get('error');
       const message = searchParams.get('message');
 
       if (success === 'oauth_complete' && message) {
         setOauthMessage({ type: 'success', message: decodeURIComponent(message) });
-        // Guardar en localStorage que se acaba de autorizar
-        localStorage.setItem('googleCalendarJustAuthorized', 'true');
+        setGoogleCalendarConnected(true); // Forzar estado conectado después de OAuth exitoso
         // Limpiar los parámetros de la URL
         router.replace('/calendario-tributario', { scroll: false });
       } else if (error && message) {
         setOauthMessage({ type: 'error', message: decodeURIComponent(message) });
+        setGoogleCalendarConnected(false);
         // Limpiar los parámetros de la URL
         router.replace('/calendario-tributario', { scroll: false });
       } else {
-        // Verificar si se acaba de autorizar (desde localStorage)
-        const justAuthorized = localStorage.getItem('googleCalendarJustAuthorized');
-        if (justAuthorized === 'true') {
-          localStorage.removeItem('googleCalendarJustAuthorized');
-          // Mostrar mensaje de éxito si está conectado
-          setTimeout(() => {
-            if (googleCalendarConnected === true) {
-              setOauthMessage({ type: 'success', message: 'Google Calendar autorizado exitosamente' });
-            }
-          }, 1000); // Pequeño delay para asegurar que el estado esté actualizado
-        }
+        // Verificar conexión de Google Calendar al cargar la página (solo si no hay parámetros OAuth)
+        await checkGoogleCalendarConnection();
       }
     };
 
@@ -193,10 +174,6 @@ export default function CalendarioTributarioPage() {
       loadEmpresaImpuestos(selectedEmpresa);
     }
   }, [selectedEmpresa, selectedYear]);
-
-  useEffect(() => {
-    checkGoogleCalendarConnection();
-  }, []);
 
   // Efecto para búsqueda predictiva de empresas
   useEffect(() => {
@@ -388,8 +365,11 @@ export default function CalendarioTributarioPage() {
 
   const checkGoogleCalendarConnection = async () => {
     try {
+      console.log('🔍 Verificando conexión con Google Calendar...');
       const response = await fetch('/api/google-calendar/status');
       const data = await response.json();
+
+      console.log('📊 Estado de conexión:', data);
 
       const wasConnected = googleCalendarConnected;
       setGoogleCalendarConnected(data.connected);
@@ -397,20 +377,19 @@ export default function CalendarioTributarioPage() {
       if (data.authRequired) {
         setGoogleCalendarAuthUrl(data.authUrl);
         setShowGoogleAuth(true);
-        // No mostrar mensaje de error si ya estaba desconectado
-        if (wasConnected === true) {
+        console.log('🔐 Se requiere autorización OAuth');
+        // Solo mostrar mensaje de error si antes estaba conectado y ahora no
+        if (wasConnected === true && !data.connected) {
           setOauthMessage({ type: 'error', message: 'Conexión con Google Calendar perdida. Reautoriza para continuar.' });
         }
       } else {
         setShowGoogleAuth(false);
         setGoogleCalendarAuthUrl(null);
-        // Solo mostrar mensaje de éxito si antes estaba desconectado y ahora está conectado
-        if (wasConnected === false && data.connected === true) {
-          setOauthMessage({ type: 'success', message: 'Google Calendar autorizado exitosamente' });
-        }
+        console.log('✅ Google Calendar conectado correctamente');
+        // No mostrar mensaje de éxito aquí para evitar conflictos con mensajes de OAuth
       }
     } catch (error) {
-      console.error('Error verificando conexión con Google Calendar:', error);
+      console.error('❌ Error verificando conexión con Google Calendar:', error);
       setGoogleCalendarConnected(false);
       setShowGoogleAuth(false);
       // Solo mostrar error si antes estaba conectado
