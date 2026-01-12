@@ -88,6 +88,24 @@ export default function CalendarioTributarioPage() {
   // Estados para mensajes de OAuth
   const [oauthMessage, setOauthMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  // Efecto para ocultar mensajes de OAuth después de 5 segundos
+  useEffect(() => {
+    if (oauthMessage) {
+      const timer = setTimeout(() => {
+        setOauthMessage(null);
+      }, 5000); // 5 segundos
+
+      return () => clearTimeout(timer);
+    }
+  }, [oauthMessage]);
+
+  // Efecto para verificar conexión cuando cambie el estado
+  useEffect(() => {
+    if (googleCalendarConnected === null) {
+      checkGoogleCalendarConnection();
+    }
+  }, [googleCalendarConnected]);
+
   // Estados para formularios
   const [showCreateImpuesto, setShowCreateImpuesto] = useState(false);
   const [showCreateVencimiento, setShowCreateVencimiento] = useState(false);
@@ -120,6 +138,9 @@ export default function CalendarioTributarioPage() {
         setSelectedEmpresa(parseInt(empresaId));
       }
 
+      // Verificar conexión de Google Calendar al cargar la página
+      await checkGoogleCalendarConnection();
+
       // Manejar parámetros de OAuth callback
       const success = searchParams.get('success');
       const error = searchParams.get('error');
@@ -127,12 +148,26 @@ export default function CalendarioTributarioPage() {
 
       if (success === 'oauth_complete' && message) {
         setOauthMessage({ type: 'success', message: decodeURIComponent(message) });
+        // Guardar en localStorage que se acaba de autorizar
+        localStorage.setItem('googleCalendarJustAuthorized', 'true');
         // Limpiar los parámetros de la URL
         router.replace('/calendario-tributario', { scroll: false });
       } else if (error && message) {
         setOauthMessage({ type: 'error', message: decodeURIComponent(message) });
         // Limpiar los parámetros de la URL
         router.replace('/calendario-tributario', { scroll: false });
+      } else {
+        // Verificar si se acaba de autorizar (desde localStorage)
+        const justAuthorized = localStorage.getItem('googleCalendarJustAuthorized');
+        if (justAuthorized === 'true') {
+          localStorage.removeItem('googleCalendarJustAuthorized');
+          // Mostrar mensaje de éxito si está conectado
+          setTimeout(() => {
+            if (googleCalendarConnected === true) {
+              setOauthMessage({ type: 'success', message: 'Google Calendar autorizado exitosamente' });
+            }
+          }, 1000); // Pequeño delay para asegurar que el estado esté actualizado
+        }
       }
     };
 
@@ -356,19 +391,32 @@ export default function CalendarioTributarioPage() {
       const response = await fetch('/api/google-calendar/status');
       const data = await response.json();
 
+      const wasConnected = googleCalendarConnected;
       setGoogleCalendarConnected(data.connected);
 
       if (data.authRequired) {
         setGoogleCalendarAuthUrl(data.authUrl);
         setShowGoogleAuth(true);
+        // No mostrar mensaje de error si ya estaba desconectado
+        if (wasConnected === true) {
+          setOauthMessage({ type: 'error', message: 'Conexión con Google Calendar perdida. Reautoriza para continuar.' });
+        }
       } else {
         setShowGoogleAuth(false);
         setGoogleCalendarAuthUrl(null);
+        // Solo mostrar mensaje de éxito si antes estaba desconectado y ahora está conectado
+        if (wasConnected === false && data.connected === true) {
+          setOauthMessage({ type: 'success', message: 'Google Calendar autorizado exitosamente' });
+        }
       }
     } catch (error) {
       console.error('Error verificando conexión con Google Calendar:', error);
       setGoogleCalendarConnected(false);
       setShowGoogleAuth(false);
+      // Solo mostrar error si antes estaba conectado
+      if (googleCalendarConnected === true) {
+        setOauthMessage({ type: 'error', message: 'Error verificando conexión con Google Calendar' });
+      }
     }
   };
 
