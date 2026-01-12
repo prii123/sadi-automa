@@ -8,97 +8,168 @@ import { query } from '../lib/database';
 dotenv.config();
 
 export class GoogleCalendarService {
+  private static instance: GoogleCalendarService;
+  private static initializing: boolean = false;
   private calendar: any;
   private oauth2Client: any;
   private calendarId: string;
+  private tokensLoaded: boolean = false;
+  private initializationPromise: Promise<void> | null = null;
 
-  constructor() {
+  private constructor() {
     this.calendarId = process.env.GOOGLE_CALENDAR_ID || 'primary';
+  }
 
-    // Cargar credenciales desde variables de entorno
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/google-calendar/auth/callback`;
+  /**
+   * Obtener la instancia única del servicio (Singleton)
+   */
+  public static async getInstance(): Promise<GoogleCalendarService> {
+    if (!GoogleCalendarService.instance) {
+      GoogleCalendarService.instance = new GoogleCalendarService();
+      await GoogleCalendarService.instance.initialize();
+    } else if (!GoogleCalendarService.instance.tokensLoaded && !GoogleCalendarService.initializing) {
+      // Si la instancia existe pero los tokens no están cargados, inicializar
+      await GoogleCalendarService.instance.initialize();
+    }
+    return GoogleCalendarService.instance;
+  }
 
-    if (!clientId || !clientSecret) {
-      throw new Error('Variables de entorno faltantes. Se requieren: GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET');
+  /**
+   * Inicialización asíncrona del servicio
+   */
+  private async initialize(): Promise<void> {
+    if (this.initializationPromise) {
+      return this.initializationPromise;
     }
 
-    // Configurar OAuth2
-    this.oauth2Client = new google.auth.OAuth2(
-      clientId,
-      clientSecret,
-      redirectUri
-    );
+    GoogleCalendarService.initializing = true;
 
-    // Configurar el listener para guardar tokens cuando se refresquen automáticamente
-    this.oauth2Client.on('tokens', (tokens: any) => {
-      console.log('Tokens refrescados automáticamente, guardando en BD...');
-      this.saveTokens(tokens).catch(error => {
-        console.error('Error guardando tokens refrescados:', error);
-      });
-    });
+    this.initializationPromise = (async () => {
+      try {
+        console.log('🚀 Inicializando Google Calendar Service...');
 
-    // Cargar tokens si existen
-    this.loadTokens().catch(error => {
-      console.error('Error inicializando tokens:', error);
-    });
+        // Cargar credenciales desde variables de entorno
+        const clientId = process.env.GOOGLE_CLIENT_ID;
+        const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+        const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/google-calendar/auth/callback`;
 
-    this.calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+        if (!clientId || !clientSecret) {
+          throw new Error('Variables de entorno faltantes. Se requieren: GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET');
+        }
+
+        // Configurar OAuth2
+        this.oauth2Client = new google.auth.OAuth2(
+          clientId,
+          clientSecret,
+          redirectUri
+        );
+
+        // Configurar el listener para guardar tokens cuando se refresquen automáticamente
+        this.oauth2Client.on('tokens', (tokens: any) => {
+          console.log('🔄 Tokens refrescados automáticamente:', Object.keys(tokens));
+          this.saveTokens(tokens).catch(error => {
+            console.error('❌ Error guardando tokens refrescados:', error);
+          });
+        });
+
+        // Cargar tokens desde la base de datos
+        await this.loadTokens();
+
+        // Inicializar cliente de Calendar
+        this.calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+
+        // Programar actualización automática de tokens si están disponibles
+        if (this.tokensLoaded && this.oauth2Client.credentials?.access_token) {
+          this.scheduleTokenRefresh();
+        }
+
+        console.log('✅ Google Calendar Service inicializado completamente');
+      } catch (error) {
+        console.error('❌ Error inicializando Google Calendar Service:', error);
+        throw error;
+      } finally {
+        GoogleCalendarService.initializing = false;
+      }
+    })();
+
+    return this.initializationPromise;
+  }
+
+  private ensureCalendarInitialized() {
+    if (!this.calendar) {
+      this.calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+      console.log('✅ Google Calendar client inicializado');
+    }
   }
 
   private async loadTokens() {
     try {
+      console.log('🔄 Cargando tokens desde base de datos...');
       const result = await query('SELECT config_value FROM google_calendar_config WHERE config_key = $1', ['oauth_tokens']);
       if (result.rows.length > 0 && result.rows[0].config_value) {
         const tokens = JSON.parse(result.rows[0].config_value);
         if (tokens && Object.keys(tokens).length > 0) {
           this.oauth2Client.setCredentials(tokens);
-          console.log('Tokens cargados desde la base de datos');
+          this.tokensLoaded = true;
+          console.log('✅ Tokens cargados exitosamente desde la base de datos');
+          console.log('📊 Estado de tokens:', {
+            hasAccessToken: !!tokens.access_token,
+            hasRefreshToken: !!tokens.refresh_token,
+            expiryDate: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null
+          });
         } else {
-          console.log('No se encontraron tokens guardados. Se requiere autorización inicial.');
+          console.log('⚠️ No se encontraron tokens válidos en la base de datos');
         }
       } else {
-        console.log('No se encontraron tokens guardados. Se requiere autorización inicial.');
+        console.log('⚠️ No se encontraron tokens en la base de datos');
       }
     } catch (error) {
-      console.error('Error cargando tokens desde la base de datos:', error);
+      console.error('❌ Error cargando tokens desde la base de datos:', error);
       // Fallback: intentar cargar desde archivo si existe (para compatibilidad)
       try {
         const tokenPath = path.join(process.cwd(), 'token.json');
         if (fs.existsSync(tokenPath)) {
           const tokens = JSON.parse(fs.readFileSync(tokenPath, 'utf8'));
           this.oauth2Client.setCredentials(tokens);
-          console.log('Tokens cargados desde archivo token.json (fallback)');
+          this.tokensLoaded = true;
+          console.log('✅ Tokens cargados desde archivo token.json (fallback)');
         }
       } catch (fallbackError) {
-        console.log('No se encontraron tokens guardados. Se requiere autorización inicial.');
+        console.log('⚠️ No se encontraron tokens guardados. Se requiere autorización inicial.');
       }
     }
   }
 
   private async saveTokens(tokens: any) {
     try {
+      console.log('💾 Guardando tokens en BD...');
       // Si solo se están actualizando algunos tokens (como refresh), combinar con los existentes
       let tokensToSave = tokens;
       if (this.oauth2Client.credentials && Object.keys(tokens).length < Object.keys(this.oauth2Client.credentials).length) {
         tokensToSave = { ...this.oauth2Client.credentials, ...tokens };
+        console.log('🔄 Combinando tokens existentes con nuevos');
       }
+
+      console.log('📝 Tokens a guardar:', {
+        hasAccessToken: !!tokensToSave.access_token,
+        hasRefreshToken: !!tokensToSave.refresh_token,
+        expiryDate: tokensToSave.expiry_date ? new Date(tokensToSave.expiry_date).toISOString() : null
+      });
 
       await query(
         'UPDATE google_calendar_config SET config_value = $1, updated_at = CURRENT_TIMESTAMP WHERE config_key = $2',
         [JSON.stringify(tokensToSave, null, 2), 'oauth_tokens']
       );
-      console.log('Tokens guardados en la base de datos');
+      console.log('✅ Tokens guardados exitosamente en la base de datos');
     } catch (error) {
-      console.error('Error guardando tokens en la base de datos:', error);
+      console.error('❌ Error guardando tokens en la base de datos:', error);
       // Fallback: intentar guardar en archivo
       try {
         const tokenPath = path.join(process.cwd(), 'token.json');
         fs.writeFileSync(tokenPath, JSON.stringify(tokens, null, 2));
-        console.log('Tokens guardados en token.json (fallback)');
+        console.log('💾 Tokens guardados en token.json (fallback)');
       } catch (fallbackError) {
-        console.error('Error guardando tokens en archivo fallback:', fallbackError);
+        console.error('❌ Error guardando tokens en archivo fallback:', fallbackError);
       }
     }
   }
@@ -109,6 +180,7 @@ export class GoogleCalendarService {
   generateAuthUrl() {
     const authUrl = this.oauth2Client.generateAuthUrl({
       access_type: 'offline',
+      prompt: 'consent', // Forzar reautorización para obtener refresh token
       scope: ['https://www.googleapis.com/auth/calendar'],
     });
     return authUrl;
@@ -130,6 +202,64 @@ export class GoogleCalendarService {
   }
 
   /**
+   * Verificar si los tokens necesitan refresh o reautorización
+   */
+  async checkTokenStatus() {
+    try {
+      console.log('🔍 Verificando estado de tokens...');
+
+      if (!this.oauth2Client.credentials || !this.oauth2Client.credentials.access_token) {
+        console.log('❌ No hay tokens disponibles');
+        return { valid: false, needsReauth: true, authUrl: this.generateAuthUrl() };
+      }
+
+      // Verificar si el token ya expiró o está próximo a expirar (menos de 10 minutos)
+      const now = Date.now();
+      const expiry = this.oauth2Client.credentials.expiry_date;
+
+      console.log('📊 Estado actual de tokens:');
+      console.log('- Access Token presente:', !!this.oauth2Client.credentials.access_token);
+      console.log('- Refresh Token presente:', !!this.oauth2Client.credentials.refresh_token);
+      console.log('- Expiry Date:', expiry ? new Date(expiry).toISOString() : 'SIN EXPIRACIÓN');
+      console.log('- Tiempo restante:', expiry ? Math.round((expiry - now) / 1000 / 60) + ' minutos' : 'DESCONOCIDO');
+
+      if (!expiry || (expiry - now) < 10 * 60 * 1000) { // 10 minutos o ya expiró
+        console.log('⏰ Token expirado o próximo a expirar');
+
+        // Si no hay refresh token, requerir reautorización completa
+        if (!this.oauth2Client.credentials.refresh_token) {
+          console.log('❌ No hay refresh token disponible, requiriendo reautorización completa');
+          return { valid: false, needsReauth: true, authUrl: this.generateAuthUrl() };
+        }
+
+        console.log('🔄 Intentando refresh automático...');
+
+        // Intentar refresh manual
+        try {
+          const { credentials } = await this.oauth2Client.refreshAccessToken();
+          this.oauth2Client.setCredentials(credentials);
+          await this.saveTokens(credentials);
+          console.log('✅ Token refrescado exitosamente');
+          return { valid: true };
+        } catch (refreshError) {
+          console.error('❌ Error refrescando token:', refreshError);
+          return { valid: false, needsReauth: true, authUrl: this.generateAuthUrl() };
+        }
+      }
+
+      console.log('✅ Tokens válidos');
+      // Programar actualización automática si no está programada
+      if (!this.oauth2Client.credentials.expiry_date) {
+        this.scheduleTokenRefresh();
+      }
+      return { valid: true };
+    } catch (error) {
+      console.error('❌ Error verificando tokens:', error);
+      return { valid: false, needsReauth: true, authUrl: this.generateAuthUrl() };
+    }
+  }
+
+  /**
    * Crear un evento en Google Calendar usando la API
    */
   async createEvent(eventData: {
@@ -141,6 +271,9 @@ export class GoogleCalendarService {
     attendees?: string[]; // Lista de correos electrónicos de invitados
   }) {
     try {
+      // Asegurar que el cliente de calendar esté inicializado
+      this.ensureCalendarInitialized();
+
       // Verificar si tenemos tokens válidos
       if (!this.oauth2Client.credentials || !this.oauth2Client.credentials.access_token) {
         return {
@@ -217,8 +350,13 @@ export class GoogleCalendarService {
    */
   async deleteEvent(eventId: string) {
     try {
+      // Asegurar que el cliente de calendar esté inicializado
+      this.ensureCalendarInitialized();
+
+      console.log('🗑️ Verificando tokens antes de eliminar evento...');
       // Verificar si tenemos tokens válidos
       if (!this.oauth2Client.credentials || !this.oauth2Client.credentials.access_token) {
+        console.log('❌ No hay tokens de acceso disponibles');
         return {
           success: false,
           error: 'No hay tokens de autenticación. Ejecuta la autorización primero.',
@@ -227,20 +365,75 @@ export class GoogleCalendarService {
         };
       }
 
+      console.log('✅ Tokens disponibles, eliminando evento de Google Calendar...');
       await this.calendar.events.delete({
         calendarId: this.calendarId,
         eventId: eventId,
       });
 
+      console.log('✅ Evento eliminado exitosamente');
       return {
         success: true,
         message: 'Evento eliminado exitosamente de Google Calendar'
       };
     } catch (error) {
-      console.error('Error eliminando evento de Google Calendar:', error);
+      console.error('❌ Error eliminando evento de Google Calendar:', error);
+
+      // Si es un error de autenticación (401), intentar refrescar tokens automáticamente
+      if (error && typeof error === 'object' && 'code' in error && error.code === 401) {
+        console.log('🔄 Error 401 detectado, intentando refrescar tokens automáticamente...');
+
+        try {
+          // Intentar refrescar tokens
+          const { credentials } = await this.oauth2Client.refreshAccessToken();
+          this.oauth2Client.setCredentials(credentials);
+          await this.saveTokens(credentials);
+          console.log('✅ Tokens refrescados exitosamente, reintentando eliminación...');
+
+          // Reintentar la eliminación con los tokens nuevos
+          await this.calendar.events.delete({
+            calendarId: this.calendarId,
+            eventId: eventId,
+          });
+
+          console.log('✅ Evento eliminado exitosamente después de refresh');
+          return {
+            success: true,
+            message: 'Evento eliminado exitosamente de Google Calendar'
+          };
+        } catch (refreshError) {
+          console.error('❌ Error refrescando tokens:', refreshError);
+          return {
+            success: false,
+            error: 'Tokens expirados y no se pudieron refrescar. Se requiere reautorización.',
+            authRequired: true,
+            authUrl: this.generateAuthUrl()
+          };
+        }
+      }
+
+      // Si es un error 404 (evento no encontrado), es un error válido
+      if (error && typeof error === 'object' && 'code' in error && error.code === 404) {
+        console.log('⚠️ Evento no encontrado en Google Calendar (404)');
+        return {
+          success: false,
+          error: 'Evento no encontrado en Google Calendar'
+        };
+      }
+
+      // Log detallado del error
+      if (error && typeof error === 'object') {
+        console.error('Detalles del error:', {
+          code: (error as any).code,
+          message: (error as any).message,
+          status: (error as any).status,
+          response: (error as any).response?.data
+        });
+      }
 
       // Si es un error de autenticación, sugerir reautorización
       if (error && typeof error === 'object' && 'code' in error && (error.code === 401 || ('message' in error && typeof error.message === 'string' && error.message.includes('invalid_grant')))) {
+        console.log('🔐 Error de autenticación detectado, requiriendo reautorización');
         return {
           success: false,
           error: 'Tokens expirados. Se requiere reautorización.',
@@ -249,6 +442,7 @@ export class GoogleCalendarService {
         };
       }
 
+      console.log('❓ Error desconocido, no es de autenticación');
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Error desconocido',
@@ -257,10 +451,56 @@ export class GoogleCalendarService {
   }
 
   /**
-   * Verificar conexión con Google Calendar usando la API
+   * Verificar si se necesita reautorización para obtener refresh token
    */
+  needsReauthForRefreshToken(): boolean {
+    return !this.oauth2Client.credentials?.refresh_token;
+  }
+
+  /**
+   * Obtener URL de reautorización para obtener refresh token
+   */
+  getReauthUrl(): string {
+    return this.generateAuthUrl();
+  }
+
+  /**
+   * Programar actualización automática de tokens
+   */
+  scheduleTokenRefresh(): void {
+    if (!this.oauth2Client.credentials?.expiry_date) return;
+
+    const now = Date.now();
+    const expiry = this.oauth2Client.credentials.expiry_date;
+    const timeUntilExpiry = expiry - now;
+
+    // Programar refresh 5 minutos antes de que expire
+    const refreshTime = Math.max(timeUntilExpiry - (5 * 60 * 1000), 60 * 1000); // Mínimo 1 minuto
+
+    if (refreshTime > 0) {
+      setTimeout(async () => {
+        console.log('⏰ Actualización automática de tokens programada...');
+        try {
+          const { credentials } = await this.oauth2Client.refreshAccessToken();
+          this.oauth2Client.setCredentials(credentials);
+          await this.saveTokens(credentials);
+          console.log('✅ Tokens actualizados automáticamente');
+
+          // Programar la siguiente actualización
+          this.scheduleTokenRefresh();
+        } catch (error) {
+          console.error('❌ Error en actualización automática de tokens:', error);
+        }
+      }, refreshTime);
+
+      console.log(`📅 Próxima actualización de tokens en ${Math.round(refreshTime / 1000 / 60)} minutos`);
+    }
+  }
   async testConnection() {
     try {
+      // Asegurar que el cliente de calendar esté inicializado
+      this.ensureCalendarInitialized();
+
       // Verificar si tenemos tokens válidos
       if (!this.oauth2Client.credentials || !this.oauth2Client.credentials.access_token) {
         return {
@@ -303,3 +543,8 @@ export class GoogleCalendarService {
 }
 
 export default GoogleCalendarService;
+
+// Función helper para obtener la instancia del servicio
+export async function getGoogleCalendarService(): Promise<GoogleCalendarService> {
+  return await GoogleCalendarService.getInstance();
+}

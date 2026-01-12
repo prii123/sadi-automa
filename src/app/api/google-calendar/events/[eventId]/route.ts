@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import GoogleCalendarService from '@/services/googleCalendarService';
+import { getGoogleCalendarService } from '@/services/googleCalendarService';
 import pool from '@/lib/database';
 
 export async function DELETE(
@@ -45,7 +45,28 @@ export async function DELETE(
     }
 
     // Crear el servicio de Google Calendar
-    const calendarService = new GoogleCalendarService();
+    const calendarService = await getGoogleCalendarService();
+
+    // Verificar estado de tokens antes de proceder
+    console.log('🔍 Verificando tokens antes de eliminar evento...');
+    const tokenStatus = await calendarService.checkTokenStatus();
+
+    if (!tokenStatus.valid) {
+      // Si no hay refresh token, intentar la operación de todos modos
+      // El método deleteEvent intentará refrescar automáticamente si recibe 401
+      if (!tokenStatus.needsReauth) {
+        console.log('⚠️ Tokens requieren atención pero pueden refrescarse automáticamente');
+      } else {
+        console.log('❌ Tokens requieren reautorización completa');
+        return NextResponse.json({
+          success: false,
+          error: 'Tokens expirados o inválidos',
+          authRequired: true,
+          authUrl: tokenStatus.authUrl,
+          message: 'Se requiere autorización OAuth para Google Calendar'
+        }, { status: 401 });
+      }
+    }
 
     // Eliminar el evento de Google Calendar
     const result = await calendarService.deleteEvent(evento.google_event_id);

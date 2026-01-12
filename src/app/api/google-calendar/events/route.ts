@@ -79,6 +79,21 @@ export async function POST(request: NextRequest) {
     // Crear el servicio de Google Calendar
     const calendarService = new GoogleCalendarService();
 
+    // Verificar estado de tokens antes de proceder
+    console.log('🔍 Verificando tokens antes de crear evento...');
+    const tokenStatus = await calendarService.checkTokenStatus();
+
+    if (!tokenStatus.valid) {
+      console.log('❌ Tokens inválidos, requiriendo reautorización');
+      return NextResponse.json({
+        success: false,
+        error: 'Tokens expirados o inválidos',
+        authRequired: true,
+        authUrl: tokenStatus.authUrl,
+        message: 'Se requiere autorización OAuth para Google Calendar'
+      }, { status: 401 });
+    }
+
     // Preparar los datos del evento
     const eventData = {
       summary: summary,

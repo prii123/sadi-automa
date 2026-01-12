@@ -365,11 +365,11 @@ export default function CalendarioTributarioPage() {
 
   const checkGoogleCalendarConnection = async () => {
     try {
-      console.log('🔍 Verificando conexión con Google Calendar...');
+      //console.log('🔍 Verificando conexión con Google Calendar...');
       const response = await fetch('/api/google-calendar/status');
       const data = await response.json();
 
-      console.log('📊 Estado de conexión:', data);
+      //console.log('📊 Estado de conexión:', data);
 
       const wasConnected = googleCalendarConnected;
       setGoogleCalendarConnected(data.connected);
@@ -377,7 +377,7 @@ export default function CalendarioTributarioPage() {
       if (data.authRequired) {
         setGoogleCalendarAuthUrl(data.authUrl);
         setShowGoogleAuth(true);
-        console.log('🔐 Se requiere autorización OAuth');
+        //console.log('🔐 Se requiere autorización OAuth');
         // Solo mostrar mensaje de error si antes estaba conectado y ahora no
         if (wasConnected === true && !data.connected) {
           setOauthMessage({ type: 'error', message: 'Conexión con Google Calendar perdida. Reautoriza para continuar.' });
@@ -385,7 +385,7 @@ export default function CalendarioTributarioPage() {
       } else {
         setShowGoogleAuth(false);
         setGoogleCalendarAuthUrl(null);
-        console.log('✅ Google Calendar conectado correctamente');
+        //console.log('✅ Google Calendar conectado correctamente');
         // No mostrar mensaje de éxito aquí para evitar conflictos con mensajes de OAuth
       }
     } catch (error) {
@@ -601,32 +601,59 @@ Generado automáticamente por SADI`;
     setRemovingAllFromGoogle(true);
     try {
       const deletePromises = syncedEvents.map(async (evento) => {
-        const response = await fetch(`/api/google-calendar/events/${evento.id}`, {
-          method: 'DELETE'
-        });
+        try {
+          //console.log(`🗑️ Intentando eliminar evento ${evento.id} de Google Calendar...`);
+          const response = await fetch(`/api/google-calendar/events/${evento.id}`, {
+            method: 'DELETE'
+          });
 
-        if (!response.ok) {
-          // Si es error 401, verificar si requiere autorización
-          if (response.status === 401) {
-            const errorData = await response.json();
-            if (errorData.authRequired) {
-              return {
-                success: false,
-                authRequired: true,
-                authUrl: errorData.authUrl,
-                error: errorData.error,
-                eventId: evento.id
-              };
+          //console.log(`📡 Respuesta para evento ${evento.id}:`, response.status, response.statusText);
+
+          if (!response.ok) {
+            // Si es error 401, intentar parsear la respuesta para ver si requiere auth
+            if (response.status === 401) {
+              try {
+                const errorData = await response.json();
+                //console.log(`❌ Error 401 parseado para evento ${evento.id}:`, errorData);
+                if (errorData.authRequired) {
+                  return {
+                    success: false,
+                    authRequired: true,
+                    authUrl: errorData.authUrl,
+                    error: errorData.error,
+                    eventId: evento.id
+                  };
+                }
+              } catch (parseError) {
+                console.error(`❌ Error parseando respuesta 401 para evento ${evento.id}:`, parseError);
+                // Si no podemos parsear, asumir que requiere auth
+                return {
+                  success: false,
+                  authRequired: true,
+                  authUrl: null,
+                  error: 'Error de autenticación',
+                  eventId: evento.id
+                };
+              }
             }
+            return {
+              success: false,
+              error: `Error HTTP ${response.status}: ${response.statusText}`,
+              eventId: evento.id
+            };
           }
+
+          const data = await response.json();
+          //console.log(`✅ Evento ${evento.id} eliminado exitosamente:`, data);
+          return data;
+        } catch (fetchError) {
+          console.error(`❌ Error de red eliminando evento ${evento.id}:`, fetchError);
           return {
             success: false,
-            error: `Error HTTP ${response.status}`,
+            error: `Error de red: ${fetchError instanceof Error ? fetchError.message : 'Error desconocido'}`,
             eventId: evento.id
           };
         }
-
-        return await response.json();
       });
 
       const results = await Promise.all(deletePromises);
@@ -641,6 +668,10 @@ Generado automáticamente por SADI`;
           setGoogleCalendarAuthUrl(authResult.authUrl);
           setShowGoogleAuth(true);
           setOauthMessage({ type: 'error', message: 'Se requiere reautorización de Google Calendar para eliminar eventos.' });
+        } else {
+          // Si no hay URL de auth, mostrar mensaje genérico
+          setShowGoogleAuth(true);
+          setOauthMessage({ type: 'error', message: 'Los tokens de Google Calendar han expirado. Haz clic en "Autorizar Google Calendar" para continuar.' });
         }
         return;
       }

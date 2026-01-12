@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleCalendarService } from '@/services/googleCalendarService';
+import { getGoogleCalendarService } from '@/services/googleCalendarService';
 
 export async function GET() {
   try {
-    const calendarService = new GoogleCalendarService();
+    const calendarService = await getGoogleCalendarService();
     const result = await calendarService.testConnection();
 
     if (result.success) {
+      // Verificar si necesitamos reautorización para obtener refresh token
+      const needsReauth = calendarService.needsReauthForRefreshToken();
+
       return NextResponse.json({
         success: true,
         connected: true,
         calendarName: result.calendarName,
-        message: result.message
+        message: result.message,
+        needsReauthForRefreshToken: needsReauth,
+        reauthUrl: needsReauth ? calendarService.getReauthUrl() : null
       });
     } else {
       // Si se requiere autorización OAuth
