@@ -79,7 +79,7 @@ export class GoogleCalendarService {
         this.calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
 
         // Programar actualización automática de tokens si están disponibles
-        if (this.tokensLoaded && this.oauth2Client.credentials?.access_token) {
+        if (this.tokensLoaded && this.oauth2Client.credentials?.access_token && this.oauth2Client.credentials?.refresh_token) {
           this.scheduleTokenRefresh();
         }
 
@@ -329,7 +329,7 @@ export class GoogleCalendarService {
       console.error('Error creando evento en Google Calendar:', error);
 
       // Si es un error de autenticación, sugerir reautorización
-      if (error && typeof error === 'object' && 'code' in error && (error.code === 401 || ('message' in error && typeof error.message === 'string' && error.message.includes('invalid_grant')))) {
+      if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' && (error.message.includes('invalid_grant') || error.message.includes('No refresh token is set') || error.message.includes('refresh token'))) {
         return {
           success: false,
           error: 'Tokens expirados. Se requiere reautorización.',
@@ -432,7 +432,7 @@ export class GoogleCalendarService {
       }
 
       // Si es un error de autenticación, sugerir reautorización
-      if (error && typeof error === 'object' && 'code' in error && (error.code === 401 || ('message' in error && typeof error.message === 'string' && error.message.includes('invalid_grant')))) {
+      if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' && (error.message.includes('invalid_grant') || error.message.includes('No refresh token is set') || error.message.includes('refresh token'))) {
         console.log('🔐 Error de autenticación detectado, requiriendo reautorización');
         return {
           success: false,
@@ -525,7 +525,7 @@ export class GoogleCalendarService {
       console.error('Error conectando a Google Calendar:', error);
 
       // Si es un error de autenticación, sugerir reautorización
-      if (error && typeof error === 'object' && 'code' in error && (error.code === 401 || ('message' in error && typeof error.message === 'string' && error.message.includes('invalid_grant')))) {
+      if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' && (error.message.includes('invalid_grant') || error.message.includes('No refresh token is set') || error.message.includes('refresh token'))) {
         return {
           success: false,
           error: 'Tokens expirados o inválidos. Se requiere reautorización.',
