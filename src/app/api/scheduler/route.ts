@@ -19,7 +19,7 @@ export async function GET() {
   }
 }
 
-// POST /api/scheduler - Controlar el scheduler (start/stop)
+// POST /api/scheduler - Controlar el scheduler (start/stop/recalculate)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -50,10 +50,14 @@ export async function POST(request: NextRequest) {
           message: 'Scheduler reiniciado'
         });
 
+      case 'recalculate':
+        const result = await scheduler.recalcularProximasEjecuciones();
+        return NextResponse.json(result);
+
       default:
         return NextResponse.json({
           success: false,
-          error: 'Acción no válida. Use: start, stop, restart'
+          error: 'Acción no válida. Use: start, stop, restart, recalculate'
         }, { status: 400 });
     }
   } catch (error) {

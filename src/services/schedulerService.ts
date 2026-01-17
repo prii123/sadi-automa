@@ -32,12 +32,12 @@ export class SchedulerService {
       try {
         await this.checkAndExecuteTriggers();
       } catch (error) {
-        console.error('Error en scheduler de triggers:', error);
+        console.error('❌ Error en scheduler de triggers:', error);
       }
     });
 
     this.isRunning = true;
-    console.log('Scheduler iniciado correctamente');
+    console.log('✅ Scheduler iniciado correctamente - verificando cada minuto');
   }
 
   // Detener el scheduler
@@ -59,19 +59,35 @@ export class SchedulerService {
       // Obtener todos los triggers activos
       const triggersResult = await TriggerService.getAll();
       if (!triggersResult.success || !triggersResult.data) {
+        console.log('⚠️ No se pudieron obtener los triggers');
         return;
       }
 
       const triggers = triggersResult.data.filter(trigger => trigger.activo === 1);
       const now = new Date();
+      
+      if (triggers.length === 0) {
+        // Solo mostrar este mensaje cada 60 iteraciones (1 hora)
+        if (Math.floor(now.getMinutes()) === 0) {
+          console.log('ℹ️ No hay triggers activos configurados');
+        }
+        return;
+      }
+
+      console.log(`🔄 Verificando ${triggers.length} trigger(s) activo(s) a las ${now.toLocaleTimeString()}`);
 
       for (const trigger of triggers) {
-        if (await this.shouldExecuteTrigger(trigger, now)) {
-          await this.executeTrigger(trigger);
+        try {
+          if (await this.shouldExecuteTrigger(trigger, now)) {
+            console.log(`🚀 Ejecutando trigger: ${trigger.nombre}`);
+            await this.executeTrigger(trigger);
+          }
+        } catch (error) {
+          console.error(`❌ Error procesando trigger "${trigger.nombre}":`, error);
         }
       }
     } catch (error) {
-      console.error('Error verificando triggers:', error);
+      console.error('❌ Error general verificando triggers:', error);
     }
   }
 
@@ -88,9 +104,20 @@ export class SchedulerService {
       }
 
       const proximaEjecucion = new Date(trigger.proxima_ejecucion);
+      
+      // Agregar tolerancia de 2 minutos para evitar problemas de sincronización
+      const tolerancia = 2 * 60 * 1000; // 2 minutos en milisegundos
+      const tiempoConTolerancia = now.getTime() + tolerancia;
+      
+      // Depuración
+      console.log(`🔍 Verificando trigger "${trigger.nombre}":`);  
+      console.log(`  - Próxima ejecución: ${proximaEjecucion.toISOString()}`);
+      console.log(`  - Hora actual: ${now.toISOString()}`);
+      console.log(`  - Diferencia: ${proximaEjecucion.getTime() - now.getTime()}ms`);
 
-      // Si la próxima ejecución es ahora o en el pasado, ejecutar
-      if (proximaEjecucion <= now) {
+      // Si la próxima ejecución es ahora o en el pasado (con tolerancia), ejecutar
+      if (proximaEjecucion.getTime() <= tiempoConTolerancia) {
+        console.log(`✅ Trigger "${trigger.nombre}" debe ejecutarse ahora`);
         return true;
       }
 
@@ -103,7 +130,11 @@ export class SchedulerService {
 
   // Calcular la próxima ejecución basada en la frecuencia
   private calcularProximaEjecucion(trigger: Trigger, fromDate: Date): Date | null {
-    const baseDate = new Date(fromDate);
+    // Usar fecha local para cálculos más precisos
+    const now = new Date();
+    const baseDate = new Date(now);
+
+    console.log(`📅 Calculando próxima ejecución para trigger "${trigger.nombre}" (${trigger.frecuencia})`);
 
     switch (trigger.frecuencia) {
       case 'diaria':
@@ -112,23 +143,41 @@ export class SchedulerService {
         baseDate.setHours(hora, minuto, 0, 0);
 
         // Si ya pasó hoy, programar para mañana
-        if (baseDate <= fromDate) {
+        if (baseDate <= now) {
           baseDate.setDate(baseDate.getDate() + 1);
         }
+        console.log(`  ⏰ Próxima ejecución diaria: ${baseDate.toISOString()}`);
         return baseDate;
 
       case 'semanal':
         // Ejecutar en los días de la semana especificados
-        if (!trigger.dias_semana) return null;
+        if (!trigger.dias_semana || trigger.dias_semana.trim() === '') {
+          console.log('  ⚠️ No hay días de semana configurados para trigger semanal');
+          return null;
+        }
 
-        const diasSemana = JSON.parse(trigger.dias_semana) as string[];
+        let diasSemana: string[];
+        try {
+          // Intentar parsear como JSON, si falla, asumir que es una cadena separada por comas
+          diasSemana = trigger.dias_semana.includes('[') 
+            ? JSON.parse(trigger.dias_semana) 
+            : trigger.dias_semana.split(',').map(d => d.trim());
+        } catch {
+          diasSemana = trigger.dias_semana.split(',').map(d => d.trim());
+        }
+
         const diasMap: { [key: string]: number } = {
           'domingo': 0, 'lunes': 1, 'martes': 2, 'miercoles': 3, 'jueves': 4, 'viernes': 5, 'sabado': 6
         };
 
         const diasNumeros = diasSemana.map(dia => diasMap[dia.toLowerCase()]).filter(d => d !== undefined);
-        const diaActual = baseDate.getDay();
+        if (diasNumeros.length === 0) {
+          console.log('  ⚠️ No se pudieron parsear los días de la semana');
+          return null;
+        }
 
+        const diaActual = baseDate.getDay();
+        
         // Encontrar el próximo día de la semana
         let diasHastaProximo = 7;
         for (const dia of diasNumeros) {
@@ -140,34 +189,44 @@ export class SchedulerService {
         baseDate.setDate(baseDate.getDate() + diasHastaProximo);
         const [horaSem, minutoSem] = trigger.hora.split(':').map(Number);
         baseDate.setHours(horaSem, minutoSem, 0, 0);
+        console.log(`  📅 Próxima ejecución semanal: ${baseDate.toISOString()}`);
         return baseDate;
 
       case 'mensual':
         // Ejecutar el día del mes especificado
-        if (!trigger.dia_mes) return null;
+        if (!trigger.dia_mes) {
+          console.log('  ⚠️ No hay día del mes configurado para trigger mensual');
+          return null;
+        }
 
         const diaMes = trigger.dia_mes;
-        baseDate.setDate(diaMes);
+        baseDate.setDate(Math.min(diaMes, 28)); // Evitar problemas con meses cortos
 
         // Si ya pasó este mes, programar para el próximo mes
-        if (baseDate <= fromDate) {
+        if (baseDate <= now) {
           baseDate.setMonth(baseDate.getMonth() + 1);
-          baseDate.setDate(diaMes);
+          baseDate.setDate(Math.min(diaMes, 28));
         }
 
         const [horaMes, minutoMes] = trigger.hora.split(':').map(Number);
         baseDate.setHours(horaMes, minutoMes, 0, 0);
+        console.log(`  📅 Próxima ejecución mensual: ${baseDate.toISOString()}`);
         return baseDate;
 
       case 'personalizada':
         // Ejecutar cada X horas
-        if (!trigger.intervalo_horas) return null;
+        if (!trigger.intervalo_horas) {
+          console.log('  ⚠️ No hay intervalo de horas configurado para trigger personalizado');
+          return null;
+        }
 
         const intervaloMs = trigger.intervalo_horas * 60 * 60 * 1000;
-        const proximaPersonalizada = new Date(fromDate.getTime() + intervaloMs);
+        const proximaPersonalizada = new Date(now.getTime() + intervaloMs);
+        console.log(`  ⏰ Próxima ejecución personalizada (${trigger.intervalo_horas}h): ${proximaPersonalizada.toISOString()}`);
         return proximaPersonalizada;
 
       default:
+        console.log(`  ⚠️ Frecuencia no reconocida: ${trigger.frecuencia}`);
         return null;
     }
   }
@@ -481,5 +540,55 @@ export class SchedulerService {
   // Obtener estado del scheduler
   getStatus(): { isRunning: boolean } {
     return { isRunning: this.isRunning };
+  }
+
+  // Recalcular próximas ejecuciones para todos los triggers activos
+  async recalcularProximasEjecuciones(): Promise<{ success: boolean; updated: number; error?: string }> {
+    try {
+      console.log('🔄 Recalculando próximas ejecuciones para todos los triggers...');
+
+      const triggersResult = await TriggerService.getAll();
+      if (!triggersResult.success || !triggersResult.data) {
+        throw new Error('No se pudieron obtener los triggers');
+      }
+
+      const triggers = triggersResult.data.filter(trigger => trigger.activo === 1);
+      const now = new Date();
+      let updated = 0;
+
+      for (const trigger of triggers) {
+        try {
+          const proximaEjecucion = this.calcularProximaEjecucion(trigger, now);
+          if (proximaEjecucion) {
+            await TriggerService.update(trigger.id!, {
+              proxima_ejecucion: proximaEjecucion.toISOString()
+            });
+            updated++;
+            console.log(`✅ Trigger "${trigger.nombre}" actualizado - próxima ejecución: ${proximaEjecucion.toISOString()}`);
+          }
+        } catch (error) {
+          console.error(`❌ Error actualizando trigger "${trigger.nombre}":`, error);
+        }
+      }
+
+      console.log(`✅ Recálculo completado: ${updated} trigger(s) actualizados`);
+      return { success: true, updated };
+
+    } catch (error) {
+      console.error('❌ Error recalculando próximas ejecuciones:', error);
+      return { success: false, updated: 0, error: (error as Error).message };
+    }
+  }
+
+  // Ejecutar un trigger específico (método público para API)
+  async executeSpecificTrigger(trigger: Trigger): Promise<{ success: boolean; error?: string; empresasProcesadas?: number; correosEnviados?: number }> {
+    try {
+      console.log(`🚀 Ejecución manual del trigger: ${trigger.nombre}`);
+      await this.executeTrigger(trigger);
+      return { success: true };
+    } catch (error) {
+      console.error(`❌ Error ejecutando trigger manualmente:`, error);
+      return { success: false, error: (error as Error).message };
+    }
   }
 }

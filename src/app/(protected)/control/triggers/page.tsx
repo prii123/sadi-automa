@@ -10,6 +10,7 @@ export default function TriggersPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingTrigger, setEditingTrigger] = useState<Trigger | null>(null);
   const [selectedTrigger, setSelectedTrigger] = useState<Trigger | null>(null);
+  const [schedulerStatus, setSchedulerStatus] = useState<{ isRunning: boolean } | null>(null);
   const [formData, setFormData] = useState({
     nombre: '',
     descripcion: '',
@@ -46,6 +47,7 @@ export default function TriggersPage() {
   // Cargar triggers
   useEffect(() => {
     fetchTriggers();
+    fetchSchedulerStatus();
   }, []);
 
   const fetchTriggers = async () => {
@@ -59,6 +61,18 @@ export default function TriggersPage() {
       console.error('Error cargando triggers:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchSchedulerStatus = async () => {
+    try {
+      const response = await fetch('/api/scheduler');
+      const data = await response.json();
+      if (data.success) {
+        setSchedulerStatus(data.data);
+      }
+    } catch (error) {
+      console.error('Error obteniendo estado del scheduler:', error);
     }
   };
 
@@ -176,18 +190,87 @@ export default function TriggersPage() {
     setShowForm(false);
   };
 
+  const handleSchedulerAction = async (action: string) => {
+    try {
+      const response = await fetch('/api/scheduler', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        alert(data.message || `Acción "${action}" ejecutada correctamente`);
+        fetchSchedulerStatus();
+        if (action === 'recalculate') {
+          fetchTriggers();
+        }
+      } else {
+        alert(data.error || 'Error ejecutando acción');
+      }
+    } catch (error) {
+      console.error('Error ejecutando acción del scheduler:', error);
+      alert('Error de conexión');
+    }
+  };
+
+  const handleExecuteTrigger = async (triggerId: number, triggerName: string) => {
+    if (!confirm(`¿Estás seguro de que quieres ejecutar manualmente el trigger "${triggerName}"?`)) return;
+
+    try {
+      const response = await fetch(`/api/triggers/${triggerId}/execute`, {
+        method: 'POST'
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        alert(`Trigger "${triggerName}" ejecutado exitosamente`);
+        fetchTriggers();
+      } else {
+        alert(data.error || 'Error ejecutando trigger');
+      }
+    } catch (error) {
+      console.error('Error ejecutando trigger:', error);
+      alert('Error de conexión');
+    }
+  };
+
   if (loading) return <div className="flex items-center justify-center h-full">Cargando...</div>;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Gestión de Triggers</h1>
-        <button
-          onClick={() => setShowForm(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
-        >
-          Nuevo Trigger
-        </button>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Gestión de Triggers</h1>
+          {schedulerStatus && (
+            <p className={`text-sm mt-1 ${schedulerStatus.isRunning ? 'text-green-600' : 'text-red-600'}`}>
+              Scheduler: {schedulerStatus.isRunning ? '🟢 Ejecutándose' : '🔴 Detenido'}
+            </p>
+          )}
+        </div>
+        <div className="flex space-x-2">
+          <button
+            onClick={() => handleSchedulerAction('recalculate')}
+            className="bg-yellow-600 text-white px-4 py-2 rounded-md hover:bg-yellow-700 focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 transition-colors"
+            title="Recalcular todas las próximas ejecuciones"
+          >
+            🔄 Recalcular
+          </button>
+          {schedulerStatus && !schedulerStatus.isRunning && (
+            <button
+              onClick={() => handleSchedulerAction('start')}
+              className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors"
+            >
+              ▶️ Iniciar Scheduler
+            </button>
+          )}
+          <button
+            onClick={() => setShowForm(true)}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+          >
+            Nuevo Trigger
+          </button>
+        </div>
       </div>
 
       {/* Formulario modal */}
@@ -462,6 +545,13 @@ export default function TriggersPage() {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                      <button
+                        onClick={() => handleExecuteTrigger(trigger.id!, trigger.nombre)}
+                        className="text-purple-600 hover:text-purple-900"
+                        title="Ejecutar ahora"
+                      >
+                        ▶️ Ejecutar
+                      </button>
                       <button
                         onClick={() => handleViewEjecuciones(trigger)}
                         className="text-blue-600 hover:text-blue-900"
