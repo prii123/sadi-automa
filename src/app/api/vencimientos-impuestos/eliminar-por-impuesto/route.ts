@@ -14,9 +14,9 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Eliminar vencimientos (soft delete - marcar como inactivos)
+    // Eliminar vencimientos (hard delete - eliminar físicamente)
     const result = await query(
-      'UPDATE vencimientos_impuestos SET activo = false WHERE impuesto_id = $1 AND anio_fiscal = $2 RETURNING id',
+      'DELETE FROM vencimientos_impuestos WHERE impuesto_id = $1 AND anio_fiscal = $2 RETURNING id',
       [parseInt(impuestoId), parseInt(anioFiscal)]
     );
 
