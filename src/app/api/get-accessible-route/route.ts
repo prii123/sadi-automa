@@ -40,11 +40,11 @@ export async function GET(request: NextRequest) {
 
     // Definir el orden de prioridad de rutas (estadisticas primero, luego otros módulos)
     const ROUTE_PRIORITY = [
+      '/control',
       '/estadisticas',
       '/empresas',
       '/notificaciones',
-      '/eventos-tributarios',
-      '/roles',
+      '/plantillas',
       '/triggers',
       '/usuarios'
     ];
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     const availableRoutes = modulos.map(modulo => modulo.ruta);
 
     // Encontrar la primera ruta accesible según la prioridad
-    let firstAccessibleRoute = '/estadisticas'; // fallback
+    let firstAccessibleRoute = '/'; // fallback
 
     for (const route of ROUTE_PRIORITY) {
       if (availableRoutes.includes(route)) {

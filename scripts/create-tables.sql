@@ -55,3 +55,19 @@ CREATE INDEX idx_resoluciones_fecha_final ON resoluciones(fecha_final);
 CREATE INDEX idx_documentos_empresa_id ON documentos(empresa_id);
 CREATE INDEX idx_documentos_activo ON documentos(activo);
 CREATE INDEX idx_documentos_fecha_final ON documentos(fecha_final);
+
+-- Crear tabla para rastrear attendees de eventos de Google Calendar
+CREATE TABLE event_attendees (
+  id SERIAL PRIMARY KEY,
+  event_id VARCHAR(255) NOT NULL, -- ID del evento en Google Calendar
+  attendee_email VARCHAR(255) NOT NULL,
+  response_status VARCHAR(50) DEFAULT 'needsAction', -- needsAction, accepted, declined, tentative
+  last_updated TIMESTAMP DEFAULT NOW(),
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(event_id, attendee_email)
+);
+
+-- Crear índices para event_attendees
+CREATE INDEX idx_event_attendees_event_id ON event_attendees(event_id);
+CREATE INDEX idx_event_attendees_email ON event_attendees(attendee_email);
+CREATE INDEX idx_event_attendees_status ON event_attendees(response_status);

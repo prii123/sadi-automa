@@ -18,7 +18,7 @@ export default async function AccessDeniedPage({ searchParams }: AccessDeniedPag
   const action = params.action as 'login' | 'accessible' | undefined;
 
   // Si la acción es 'accessible', obtener la ruta accesible
-  let accessibleRoute = '/estadisticas'; // fallback
+  let accessibleRoute = '/'; // fallback
 
   if (action === 'accessible') {
     try {
@@ -35,11 +35,11 @@ export default async function AccessDeniedPage({ searchParams }: AccessDeniedPag
           if (modulos.length > 0) {
             // Definir el orden de prioridad de rutas
             const ROUTE_PRIORITY = [
+              '/control',
               '/estadisticas',
               '/empresas',
               '/notificaciones',
-              '/eventos-tributarios',
-              '/roles',
+              '/plantillas',
               '/triggers',
               '/usuarios'
             ];

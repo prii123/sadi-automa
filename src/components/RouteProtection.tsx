@@ -12,11 +12,11 @@ interface RouteProtectionProps {
 
 // Mapeo de rutas a nombres de módulos
 const ROUTE_MODULE_MAP: Record<string, string> = {
+  '/control': 'Control',
   '/estadisticas': 'Estadísticas',
   '/empresas': 'Empresas',
-  '/eventos-tributarios': 'Eventos Tributarios',
   '/notificaciones': 'Notificaciones',
-  '/roles': 'Roles',
+  '/plantillas': 'Plantillas',
   '/triggers': 'Triggers',
   '/usuarios': 'Usuarios',
 };
@@ -50,6 +50,13 @@ export default function RouteProtection({
 
       const currentUser = authData.user;
       setUser(currentUser);
+
+      // Permitir acceso directo a /control (dashboard)
+      if (pathname === '/control') {
+        setHasAccess(true);
+        setLoading(false);
+        return;
+      }
 
       // Determinar el módulo basado en la ruta
       const currentModule = moduleName || ROUTE_MODULE_MAP[pathname] || getModuleFromPath(pathname);

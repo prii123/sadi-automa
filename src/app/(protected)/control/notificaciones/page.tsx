@@ -62,7 +62,7 @@ export default function NotificacionesPage() {
   };
 
   const cambiarFiltro = (nuevoFiltro: 'todas' | 'pendientes') => {
-    router.push(`/notificaciones?filtro=${nuevoFiltro}`);
+    router.push(`/control/notificaciones?filtro=${nuevoFiltro}`);
   };
 
   const marcarComoRenovado = async (notificacion: NotificacionConEmpresa) => {

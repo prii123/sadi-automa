@@ -222,7 +222,7 @@ class EmailService {
 
           <!-- Botón de acción -->
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/notificaciones"
+            <a href="${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/control/notificaciones"
                style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                       color: white;
                       padding: 15px 30px;

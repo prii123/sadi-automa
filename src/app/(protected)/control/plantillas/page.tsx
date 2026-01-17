@@ -105,7 +105,7 @@ export default function PlantillasPage() {
   };
 
   const handleEditContent = (plantilla: PlantillaConUsuario) => {
-    router.push(`/plantillas/${plantilla.id}/editar`);
+    router.push(`/control/plantillas/${plantilla.id}/editar`);
   };
 
   const resetForm = () => {

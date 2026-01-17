@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Crear el contenido del email
-    const subject = `Notificación de Vencimientos Tributarios - ${empresaNombre}`;
+    const subject = `Calendario Tributario - Vencimientos de ${empresaNombre}`;
 
     let htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
         </p>
 
         <p style="color: #666; font-size: 14px; line-height: 1.5;">
-          Los siguientes vencimientos tributarios están próximos o pendientes:
+          Los siguientes vencimientos tributarios están programados para este período:
         </p>
 
         <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
@@ -101,11 +101,17 @@ export async function POST(request: NextRequest) {
 
     // Enviar emails a todos los destinatarios
     const emailPromises = emails.map(async (email: string) => {
-      return await emailService.sendEmail({
-        to: email,
-        subject,
-        html: htmlContent
-      });
+      try {
+        const result = await emailService.sendEmail({
+          to: email,
+          subject,
+          html: htmlContent
+        });
+        return { success: result, email };
+      } catch (error) {
+        console.error(`Error enviando correo a ${email}:`, error);
+        return { success: false, email, error };
+      }
     });
 
     const results = await Promise.all(emailPromises);

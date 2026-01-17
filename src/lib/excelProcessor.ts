@@ -8,6 +8,7 @@ export interface Impuesto {
   periodicidad: 'anual' | 'bimestral' | 'cuatrimestral' | 'mensual' | 'semestral' | 'trimestral';
   descripcion: string;
   activo: boolean;
+  color?: string;
 }
 
 export interface ProcessedExcelData {
@@ -42,16 +43,16 @@ export const processExcelFile = async (file: File): Promise<any[]> => {
       } else if (typeof cell === 'number' && cell > 40000 && cell < 80000) {
         // Convertir número serial de Excel a fecha
         const excelDate = new Date((cell - 25569) * 86400 * 1000); // 25569 es el offset de Excel
-        // Formatear manualmente para asegurar dd/mm/yyyy con ceros
-        const dia = excelDate.getDate().toString().padStart(2, '0');
-        const mes = (excelDate.getMonth() + 1).toString().padStart(2, '0');
-        const anio = excelDate.getFullYear();
+        // Usar métodos UTC para evitar problemas de zona horaria
+        const dia = excelDate.getUTCDate().toString().padStart(2, '0');
+        const mes = (excelDate.getUTCMonth() + 1).toString().padStart(2, '0');
+        const anio = excelDate.getUTCFullYear();
         processedRow[key] = `${dia}/${mes}/${anio}`;
       } else if (cell instanceof Date) {
-        // Formatear manualmente para asegurar dd/mm/yyyy con ceros
-        const dia = cell.getDate().toString().padStart(2, '0');
-        const mes = (cell.getMonth() + 1).toString().padStart(2, '0');
-        const anio = cell.getFullYear();
+        // Usar métodos UTC para evitar problemas de zona horaria
+        const dia = cell.getUTCDate().toString().padStart(2, '0');
+        const mes = (cell.getUTCMonth() + 1).toString().padStart(2, '0');
+        const anio = cell.getUTCFullYear();
         processedRow[key] = `${dia}/${mes}/${anio}`;
       } else {
         processedRow[key] = cell.toString();

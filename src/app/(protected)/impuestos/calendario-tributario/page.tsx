@@ -28,6 +28,7 @@ interface CalendarioItem {
   google_event_id?: string;
   synced_to_google?: boolean;
   google_last_sync?: string;
+  impuesto_color?: string;
 }
 
 interface Empresa {
@@ -44,6 +45,7 @@ interface Impuesto {
   periodicidad: 'anual' | 'bimestral' | 'cuatrimestral' | 'mensual';
   descripcion: string;
   activo: boolean;
+  color?: string;
 }
 
 interface EmpresaImpuesto {
@@ -119,6 +121,37 @@ export default function CalendarioTributarioPage() {
 
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // Colores disponibles de Google Calendar
+  const googleCalendarColors = [
+    { id: '7', name: 'Azul', hex: '#039be5' },
+    { id: '2', name: 'Verde', hex: '#33b679' },
+    { id: '11', name: 'Rojo', hex: '#d60000' },
+    { id: '5', name: 'Amarillo', hex: '#f6c026' },
+    { id: '6', name: 'Naranja', hex: '#f5511d' },
+    { id: '3', name: 'Púrpura', hex: '#8e24aa' },
+    { id: '4', name: 'Rosa', hex: '#e67c73' },
+    { id: '8', name: 'Gris', hex: '#616161' },
+    { id: '9', name: 'Azul Oscuro', hex: '#3f51b5' },
+    { id: '10', name: 'Verde Oscuro', hex: '#0b8043' },
+    { id: '1', name: 'Lavanda', hex: '#7986cb' }
+  ];
+
+  // Función para mapear color hexadecimal a colorId de Google Calendar
+  const mapHexToGoogleColorId = (hexColor: string): string => {
+    if (!hexColor) return '7'; // Default: Azul
+
+    const normalizedColor = hexColor.toLowerCase();
+    const color = googleCalendarColors.find(c => c.hex.toLowerCase() === normalizedColor);
+
+    if (color) {
+      console.log(`Color encontrado: ${normalizedColor} -> ${color.name} (${color.id})`);
+      return color.id;
+    }
+
+    console.log(`Color no encontrado: ${normalizedColor}, usando default Azul (7)`);
+    return '7'; // Default: Azul
+  };
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -432,6 +465,7 @@ Generado automáticamente por SADI`;
           summary,
           description,
           startDate: evento.fecha_vencimiento.split('T')[0], // Solo la fecha, sin hora
+          colorId: mapHexToGoogleColorId(evento.impuesto_color || '#3B82F6')
         })
       });
 
@@ -536,6 +570,7 @@ Generado automáticamente por SADI`;
             summary,
             description,
             startDate: evento.fecha_vencimiento.split('T')[0],
+            colorId: mapHexToGoogleColorId(evento.impuesto_color || '#3B82F6')
           })
         });
 
@@ -693,9 +728,9 @@ Generado automáticamente por SADI`;
   const sendEmailsForEvents = async () => {
     if (!selectedEmpresa) return;
 
-    const eventsToNotify = calendario.filter(c => c.estado === 'pendiente');
+    const eventsToNotify = calendario; // Incluir todos los eventos, no solo pendientes
     if (eventsToNotify.length === 0) {
-      alert('No hay eventos pendientes para notificar');
+      alert('No hay eventos para notificar');
       return;
     }
 
@@ -908,13 +943,6 @@ Generado automáticamente por SADI`;
         <>
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Calendario Tributario
-            </h1>
-            <p className="text-gray-600">
-              Gestiona los vencimientos tributarios de tus empresas
-            </p>
-            
             {/* Indicador de conexión Google Calendar */}
             <div className="mt-4 flex items-center space-x-4">
               <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
@@ -1454,7 +1482,7 @@ Generado automáticamente por SADI`;
                   <>
                     📧 Enviar Notificaciones por Email
                     <div className="text-xs mt-1 opacity-90">
-                      ({calendario.filter(c => c.estado === 'pendiente').length} pendientes)
+                      ({calendario.length} eventos)
                     </div>
                   </>
                 )}

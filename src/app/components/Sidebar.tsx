@@ -54,7 +54,19 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
 
       const menuItemsData = await response.json();
 
-      setMenuItems(menuItemsData);
+      // Filtrar para excluir módulos movidos a control y otros
+      const filteredMenuItems = menuItemsData.filter((item: MenuItem) => 
+        item.name !== 'Calendario Tributario' && 
+        item.name !== 'Roles' && 
+        item.name !== 'Eventos Tributarios' &&
+        item.name !== 'Estadísticas' &&
+        item.name !== 'Notificaciones' &&
+        item.name !== 'Plantillas' &&
+        item.name !== 'Triggers' &&
+        item.name !== 'Control'
+      );
+
+      setMenuItems(filteredMenuItems);
     } catch (error) {
       console.error('Error cargando menú dinámico:', error);
       // Fallback: menú vacío
@@ -66,14 +78,14 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
 
   const getIconForModulo = (moduloNombre: string): string => {
     const icons: { [key: string]: string } = {
+      'Control': '🎛️',
       'Dashboard': '📊',
       'Estadísticas': '📊',
       'Empresas': '🏢',
       'Notificaciones': '🔔',
+      'Plantillas': '📝',
       'Triggers': '⚡',
-      'Eventos Tributarios': '📅',
-      'Usuarios': '👥',
-      'Roles': '🔐'
+      'Usuarios': '👥'
     };
     return icons[moduloNombre] || '📄';
   };
@@ -155,6 +167,22 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
             >
               <span className="mr-3">🏠</span>
               Home
+            </Link>
+
+            {/* Control - siempre visible */}
+            <Link
+              href="/control"
+              className={`
+                flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors
+                ${pathname.startsWith('/control')
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                }
+              `}
+              onClick={() => setIsOpen(false)}
+            >
+              <span className="mr-3">🎛️</span>
+              Control
             </Link>
 
             {menuItems.map((item) => {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { processExcelFile, processDataFromLines, downloadExcel, generateTemplateData, ProcessedExcelData, Impuesto } from '@/lib/excelProcessor';
 
 interface VencimientoImpuesto {
@@ -37,6 +38,23 @@ export default function ImpuestosPage() {
   // Estados para expansión de vencimientos
   const [expandedVencimientos, setExpandedVencimientos] = useState<Set<number>>(new Set());
 
+  const router = useRouter();
+
+  // Colores disponibles de Google Calendar
+  const googleCalendarColors = [
+    { id: '7', name: 'Azul', hex: '#039be5' },
+    { id: '2', name: 'Verde', hex: '#33b679' },
+    { id: '11', name: 'Rojo', hex: '#d60000' },
+    { id: '5', name: 'Amarillo', hex: '#f6c026' },
+    { id: '6', name: 'Naranja', hex: '#f5511d' },
+    { id: '3', name: 'Púrpura', hex: '#8e24aa' },
+    { id: '4', name: 'Rosa', hex: '#e67c73' },
+    { id: '8', name: 'Gris', hex: '#616161' },
+    { id: '9', name: 'Azul Oscuro', hex: '#3f51b5' },
+    { id: '10', name: 'Verde Oscuro', hex: '#0b8043' },
+    { id: '1', name: 'Lavanda', hex: '#7986cb' }
+  ];
+
   // Función para toggle expansión de vencimiento
   const toggleVencimientoExpansion = (vencimientoId: number) => {
     setExpandedVencimientos(prev => {
@@ -56,7 +74,8 @@ export default function ImpuestosPage() {
     codigo: '',
     tipo: 'nacional' as 'nacional' | 'departamental' | 'municipal',
     periodicidad: 'mensual' as 'anual' | 'bimestral' | 'cuatrimestral' | 'mensual' | 'semestral' | 'trimestral',
-    descripcion: ''
+    descripcion: '',
+    color: '#039be5' // Azul por defecto
   });
 
   const [editImpuesto, setEditImpuesto] = useState({
@@ -64,7 +83,8 @@ export default function ImpuestosPage() {
     codigo: '',
     tipo: 'nacional' as 'nacional' | 'departamental' | 'municipal',
     periodicidad: 'mensual' as 'anual' | 'bimestral' | 'cuatrimestral' | 'mensual' | 'semestral' | 'trimestral',
-    descripcion: ''
+    descripcion: '',
+    color: '#039be5' // Azul por defecto
   });
 
   const [newVencimiento, setNewVencimiento] = useState({
@@ -191,7 +211,8 @@ export default function ImpuestosPage() {
           codigo: '',
           tipo: 'nacional',
           periodicidad: 'mensual',
-          descripcion: ''
+          descripcion: '',
+          color: '#039be5'
         });
         setShowCreateImpuesto(false);
         loadImpuestos();
@@ -253,7 +274,8 @@ export default function ImpuestosPage() {
           codigo: '',
           tipo: 'nacional',
           periodicidad: 'mensual',
-          descripcion: ''
+          descripcion: '',
+          color: '#039be5'
         });
         setEditingImpuesto(null);
         setShowEditImpuesto(false);
@@ -292,6 +314,29 @@ export default function ImpuestosPage() {
     }
   };
 
+  const eliminarVencimientosPorImpuesto = async (impuestoId: number, impuestoNombre: string) => {
+    if (!confirm(`¿Está seguro de que desea eliminar TODOS los vencimientos del impuesto "${impuestoNombre}" para el año ${selectedYear}? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/vencimientos-impuestos/eliminar-por-impuesto?impuestoId=${impuestoId}&anioFiscal=${selectedYear}`, {
+        method: 'DELETE'
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        loadVencimientos();
+        alert(`Se eliminaron ${data.deletedCount} vencimiento(s) exitosamente`);
+      } else {
+        alert('Error eliminando vencimientos: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error eliminando vencimientos:', error);
+      alert('Error eliminando vencimientos');
+    }
+  };
+
   const abrirEditarImpuesto = (impuesto: Impuesto) => {
     // console.log('Abriendo edición de impuesto:', impuesto.nombre, '(ID:', impuesto.id + ')');
     setEditingImpuesto(impuesto);
@@ -300,7 +345,8 @@ export default function ImpuestosPage() {
       codigo: impuesto.codigo,
       tipo: impuesto.tipo,
       periodicidad: impuesto.periodicidad,
-      descripcion: impuesto.descripcion
+      descripcion: impuesto.descripcion,
+      color: impuesto.color || '#039be5'
     });
     setShowEditImpuesto(true);
   };
@@ -491,15 +537,6 @@ export default function ImpuestosPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-black mb-2">
-          Gestión de Impuestos
-        </h1>
-        <p className="text-black">
-          Administra los impuestos y sus vencimientos fiscales
-        </p>
-      </div>
 
       {/* Acciones de Administración */}
       <div className="bg-white rounded-lg shadow p-6 mb-6">
@@ -521,8 +558,9 @@ export default function ImpuestosPage() {
             onClick={() => setShowUploadCSV(!showUploadCSV)}
             className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700"
           >
-            {showUploadCSV ? 'Cancelar' : '� Subir Excel'}
+            {showUploadCSV ? 'Cancelar' : '📤 Subir Excel'}
           </button>
+
         </div>
       </div>
 
@@ -586,6 +624,22 @@ export default function ImpuestosPage() {
                 <option value="anual">Anual</option>
               </select>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-black mb-2">
+                Color de Identificación
+              </label>
+              <select
+                value={newImpuesto.color}
+                onChange={(e) => setNewImpuesto({...newImpuesto, color: e.target.value})}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
+              >
+                {googleCalendarColors.map((color) => (
+                  <option key={color.id} value={color.hex}>
+                    {color.name}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-black mb-2">
                 Descripción
@@ -633,7 +687,8 @@ export default function ImpuestosPage() {
                     codigo: '',
                     tipo: 'nacional',
                     periodicidad: 'mensual',
-                    descripcion: ''
+                    descripcion: '',
+                    color: '#039be5'
                   });
                 }}
                 className="text-gray-500 hover:text-gray-700 text-xl"
@@ -699,6 +754,22 @@ export default function ImpuestosPage() {
                   <option value="anual">Anual</option>
                 </select>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-black mb-2">
+                  Color de Identificación
+                </label>
+                <select
+                  value={editImpuesto.color}
+                  onChange={(e) => setEditImpuesto({...editImpuesto, color: e.target.value})}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                >
+                  {googleCalendarColors.map((color) => (
+                    <option key={color.id} value={color.hex}>
+                      {color.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-black mb-2">
                   Descripción
@@ -722,7 +793,8 @@ export default function ImpuestosPage() {
                       codigo: '',
                       tipo: 'nacional',
                       periodicidad: 'mensual',
-                      descripcion: ''
+                      descripcion: '',
+                      color: '#3B82F6'
                     });
                   }}
                   className="bg-gray-600 text-white px-6 py-2 rounded-md hover:bg-gray-700"
@@ -1141,6 +1213,10 @@ export default function ImpuestosPage() {
                 <div className="bg-gray-50 px-6 py-4 border-b">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
+                      <div 
+                        className="w-4 h-4 rounded border border-gray-300" 
+                        style={{ backgroundColor: impuesto.color }}
+                      ></div>
                       <h3 className="text-lg font-semibold text-black">
                         {impuesto.nombre}
                       </h3>
@@ -1174,9 +1250,20 @@ export default function ImpuestosPage() {
 
                 {/* Vencimientos */}
                 <div className="p-6">
-                  <h4 className="text-md font-medium text-black mb-4">
-                    Vencimientos ({vencimientosImpuesto.length})
-                  </h4>
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-md font-medium text-black">
+                      Vencimientos ({vencimientosImpuesto.length})
+                    </h4>
+                    {vencimientosImpuesto.length > 0 && (
+                      <button
+                        onClick={() => eliminarVencimientosPorImpuesto(impuesto.id, impuesto.nombre)}
+                        className="px-3 py-1 text-xs bg-red-600 text-white rounded-md hover:bg-red-700"
+                        title={`Eliminar todos los vencimientos de ${impuesto.nombre} para ${selectedYear}`}
+                      >
+                        🗑️ Eliminar Todos
+                      </button>
+                    )}
+                  </div>
 
                   {vencimientosImpuesto.length > 0 ? (
                     <div className="space-y-3">
@@ -1189,7 +1276,7 @@ export default function ImpuestosPage() {
                               className="flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 cursor-pointer"
                               onClick={() => toggleVencimientoExpansion(vencimiento.id)}
                             >
-                              <div className="flex items-center space-x-4">
+                              <div className="flex items-center space-x-4 flex-1">
                                 <div className="flex items-center space-x-2">
                                   <span className={`transform transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
                                     ▶
@@ -1209,11 +1296,13 @@ export default function ImpuestosPage() {
                                   )}
                                 </div>
                               </div>
-                              {vencimiento.descripcion && (
-                                <div className="text-sm text-gray-500 max-w-md truncate">
-                                  {vencimiento.descripcion}
-                                </div>
-                              )}
+                              <div className="flex items-center space-x-2">
+                                {vencimiento.descripcion && (
+                                  <div className="text-sm text-gray-500 max-w-md truncate">
+                                    {vencimiento.descripcion}
+                                  </div>
+                                )}
+                              </div>
                             </div>
 
                             {/* Detalles expandidos */}

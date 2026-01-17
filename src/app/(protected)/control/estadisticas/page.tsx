@@ -53,12 +53,12 @@ export default function EstadisticasHome() {
 
   const handleProximosVencerClick = () => {
     // Redirigir a la página de notificaciones con filtro de próximos a vencer
-    router.push('/notificaciones?filtro=pendientes&tipo=proximos_vencer');
+    router.push('/control/notificaciones?filtro=pendientes&tipo=proximos_vencer');
   };
 
   const handleVencidosClick = () => {
     // Redirigir a la página de notificaciones con filtro de vencidos
-    router.push('/notificaciones?filtro=pendientes&tipo=vencidos');
+    router.push('/control/notificaciones?filtro=pendientes&tipo=vencidos');
   };
 
   const handleNoEmpresasClick = () => {

@@ -24,7 +24,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { nombre, codigo, tipo, periodicidad, descripcion } = body;
+    const { nombre, codigo, tipo, periodicidad, descripcion, color } = body;
 
     // Validación básica
     if (!nombre || !codigo || !tipo || !periodicidad) {
@@ -53,10 +53,10 @@ export async function POST(request: NextRequest) {
 
     // Crear el impuesto
     const result = await client.query(
-      `INSERT INTO impuestos (nombre, codigo, tipo, periodicidad, descripcion)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO impuestos (nombre, codigo, tipo, periodicidad, descripcion, color)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [nombre, codigo, tipo, periodicidad, descripcion]
+      [nombre, codigo, tipo, periodicidad, descripcion, color || '#3B82F6']
     );
 
     await client.end();

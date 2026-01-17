@@ -7,16 +7,11 @@ export async function GET() {
     const result = await calendarService.testConnection();
 
     if (result.success) {
-      // Verificar si necesitamos reautorización para obtener refresh token
-      const needsReauth = calendarService.needsReauthForRefreshToken();
-
       return NextResponse.json({
         success: true,
         connected: true,
         calendarName: result.calendarName,
-        message: result.message,
-        needsReauthForRefreshToken: needsReauth,
-        reauthUrl: needsReauth ? calendarService.getReauthUrl() : null
+        message: result.message
       });
     } else {
       // Si se requiere autorización OAuth

@@ -7,10 +7,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const body = await request.json();
     console.log('PUT /api/impuestos/[id] llamado con ID:', id);
     console.log('Body recibido:', body);
-    const { nombre, codigo, tipo, periodicidad, descripcion } = body;
+    const { nombre, codigo, tipo, periodicidad, descripcion, color } = body;
     const impuestoId = parseInt(id);
 
-    console.log('Datos extraídos:', { nombre, codigo, tipo, periodicidad, descripcion, impuestoId });
+    console.log('Datos extraídos:', { nombre, codigo, tipo, periodicidad, descripcion, color, impuestoId });
 
     // Validación básica
     if (!nombre || !codigo || !tipo || !periodicidad) {
@@ -54,10 +54,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     // Actualizar el impuesto
     const result = await client.query(
       `UPDATE impuestos
-       SET nombre = $1, codigo = $2, tipo = $3, periodicidad = $4, descripcion = $5, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $6
+       SET nombre = $1, codigo = $2, tipo = $3, periodicidad = $4, descripcion = $5, color = $6, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $7
        RETURNING *`,
-      [nombre, codigo, tipo, periodicidad, descripcion, impuestoId]
+      [nombre, codigo, tipo, periodicidad, descripcion, color || '#3B82F6', impuestoId]
     );
 
     await client.end();

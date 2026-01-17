@@ -37,11 +37,11 @@ export async function GET(request: NextRequest) {
 
     // Mapeo de rutas a nombres de módulos
     const ROUTE_MODULE_MAP: Record<string, string> = {
+      '/control': 'Control',
       '/estadisticas': 'Estadísticas',
       '/empresas': 'Empresas',
-      '/eventos-tributarios': 'Eventos Tributarios',
       '/notificaciones': 'Notificaciones',
-      '/roles': 'Roles',
+      '/plantillas': 'Plantillas',
       '/triggers': 'Triggers',
       '/usuarios': 'Usuarios',
     };

@@ -123,3 +123,47 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, error: 'ID del vencimiento es requerido' },
+        { status: 400 }
+      );
+    }
+
+    // Verificar que el vencimiento existe
+    const existing = await query(
+      'SELECT id FROM vencimientos_impuestos WHERE id = $1',
+      [parseInt(id)]
+    );
+
+    if (existing.rows.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Vencimiento no encontrado' },
+        { status: 404 }
+      );
+    }
+
+    // Eliminar el vencimiento (soft delete - marcar como inactivo)
+    await query(
+      'UPDATE vencimientos_impuestos SET activo = false WHERE id = $1',
+      [parseInt(id)]
+    );
+
+    return NextResponse.json({
+      success: true,
+      message: 'Vencimiento eliminado exitosamente'
+    });
+  } catch (error) {
+    console.error('Error eliminando vencimiento:', error);
+    return NextResponse.json(
+      { success: false, error: 'Error interno del servidor' },
+      { status: 500 }
+    );
+  }
+}

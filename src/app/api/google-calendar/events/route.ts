@@ -5,7 +5,7 @@ import pool from '@/lib/database';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { calendarioId, summary, description, startDate } = body;
+    const { calendarioId, summary, description, startDate, colorId } = body;
 
     if (!calendarioId || !summary || !startDate) {
       return NextResponse.json(
@@ -100,6 +100,7 @@ export async function POST(request: NextRequest) {
       description: description || `Vencimiento tributario: ${evento.impuesto_nombre} - ${evento.empresa_nombre}\nFecha de vencimiento: ${evento.fecha_vencimiento}\nPeriodo: ${evento.periodo}`,
       startDate: startDate,
       attendees: attendees.length > 0 ? attendees : undefined,
+      colorId: colorId || '7', // Color por defecto (Peacock)
     };
 
     console.log('Creando evento con los siguientes datos:');

@@ -10,6 +10,7 @@ export interface Impuesto {
   municipio?: string;
   descripcion: string;
   activo: boolean;
+  color?: string;
 }
 
 export interface VencimientoImpuesto {
@@ -245,7 +246,7 @@ export class CalendarioTributarioService {
       let sqlQuery = `
         SELECT ct.*,
                i.nombre as impuesto_nombre, i.codigo as impuesto_codigo,
-               i.tipo as tipo_impuesto, i.periodicidad,
+               i.tipo as tipo_impuesto, i.periodicidad, i.color as impuesto_color,
                vi.anio_fiscal, vi.periodo as periodo_impuesto, vi.descripcion as vencimiento_descripcion,
                vi.fechas_por_digito
         FROM calendario_tributario ct
@@ -521,4 +522,37 @@ export class CalendarioTributarioService {
       throw error;
     }
   }
+  async obtenerTodosCalendarios(year?: number): Promise<any[]> {
+    try {
+      let sqlQuery = `
+        SELECT ct.*,
+               e.nombre as empresa_nombre, e.nit as empresa_nit,
+               i.nombre as impuesto_nombre, i.codigo as impuesto_codigo, i.color as impuesto_color,
+               i.tipo as tipo_impuesto, i.periodicidad,
+               vi.anio_fiscal, vi.periodo as periodo_impuesto, vi.descripcion as vencimiento_descripcion,
+               vi.fechas_por_digito
+        FROM calendario_tributario ct
+        JOIN empresas e ON e.id = ct.empresa_id
+        JOIN empresa_impuestos ei ON ei.empresa_id = ct.empresa_id AND ei.impuesto_id = ct.impuesto_id AND ei.activo = true
+        JOIN impuestos i ON ct.impuesto_id = i.id
+        LEFT JOIN vencimientos_impuestos vi ON vi.id = ct.vencimiento_impuesto_id
+        WHERE 1=1
+      `;
+      const params: any[] = [];
+
+      if (year) {
+        sqlQuery += ' AND EXTRACT(YEAR FROM ct.fecha_vencimiento) = $1';
+        params.push(year);
+      }
+
+      sqlQuery += ' ORDER BY ct.fecha_vencimiento ASC';
+
+      const result = await query(sqlQuery, params);
+      return result.rows;
+    } catch (error) {
+      console.error('❌ Error obteniendo todos los calendarios:', error);
+      throw error;
+    }
+  }
+
 }

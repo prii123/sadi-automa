@@ -38,13 +38,12 @@ export async function GET(request: NextRequest) {
 
 function getIconForModulo(nombre: string): string {
   const icons: { [key: string]: string } = {
+    'Control': '🎛️',
     'Estadísticas': '📊',
     'Empresas': '🏢',
     'Notificaciones': '🔔',
     'Triggers': '⚡',
-    'Eventos Tributarios': '📅',
     'Usuarios': '👥',
-    'Roles': '🔐',
     'Calendario Tributario': '📅',
     'Impuestos': '💰',
     'Plantillas': '📝'

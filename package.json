@@ -14,6 +14,7 @@
     "@types/node-cron": "^3.0.11",
     "@types/pg": "^8.16.0",
     "bcryptjs": "^3.0.3",
+    "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",
     "googleapis": "^170.0.0",
     "jsonwebtoken": "^9.0.3",
@@ -22,6 +23,7 @@
     "nodemailer": "^7.0.12",
     "pg": "^8.16.3",
     "react": "19.2.3",
+    "react-big-calendar": "^1.19.4",
     "react-dom": "19.2.3",
     "xlsx": "^0.18.5"
   },
@@ -30,6 +32,7 @@
     "@types/node": "^20",
     "@types/nodemailer": "^7.0.4",
     "@types/react": "^19",
+    "@types/react-big-calendar": "^1.16.3",
     "@types/react-dom": "^19",
     "@types/xlsx": "^0.0.35",
     "eslint": "^9",

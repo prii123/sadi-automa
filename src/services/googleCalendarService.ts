@@ -265,10 +265,11 @@ export class GoogleCalendarService {
   async createEvent(eventData: {
     summary: string;
     description: string;
-    startDate: string; // formato YYYY-MM-DD
-    endDate?: string; // formato YYYY-MM-DD
+    startDate: string; // formato YYYY-MM-DD (evento de todo el día)
+    endDate?: string; // formato YYYY-MM-DD (evento de todo el día)
     reminders?: { minutes: number }[];
     attendees?: string[]; // Lista de correos electrónicos de invitados
+    colorId?: string; // ID del color de Google Calendar (1-11)
   }) {
     try {
       // Asegurar que el cliente de calendar esté inicializado
@@ -288,12 +289,10 @@ export class GoogleCalendarService {
         summary: eventData.summary,
         description: eventData.description,
         start: {
-          dateTime: new Date(eventData.startDate + 'T09:00:00').toISOString(),
-          timeZone: 'America/Bogota',
+          date: eventData.startDate, // Evento de todo el día
         },
         end: {
-          dateTime: new Date((eventData.endDate || eventData.startDate) + 'T10:00:00').toISOString(),
-          timeZone: 'America/Bogota',
+          date: eventData.endDate ? new Date(new Date(eventData.endDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0] : new Date(new Date(eventData.startDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Día siguiente para eventos de un día
         },
         reminders: {
           useDefault: false,
@@ -302,7 +301,7 @@ export class GoogleCalendarService {
             { method: 'popup', minutes: 60 }, // 1 hora antes
           ],
         },
-        colorId: '4', // Azul para eventos tributarios
+        colorId: eventData.colorId || '4', // Color personalizado o azul por defecto
       };
 
       // Agregar invitados si se proporcionan
@@ -318,6 +317,11 @@ export class GoogleCalendarService {
         resource: event,
         sendNotifications: true, // Enviar notificaciones a los attendees
       });
+
+      // Guardar attendees en BD local para seguimiento
+      if (eventData.attendees && eventData.attendees.length > 0) {
+        await this.saveEventAttendees(response.data.id!, eventData.attendees);
+      }
 
       return {
         success: true,
@@ -538,6 +542,111 @@ export class GoogleCalendarService {
         success: false,
         error: error instanceof Error ? error.message : 'Error desconocido',
       };
+    }
+  }
+
+  /**
+   * Guardar attendees de un evento en la base de datos local
+   */
+  private async saveEventAttendees(eventId: string, attendees: string[]) {
+    try {
+      for (const email of attendees) {
+        await query(
+          'INSERT INTO event_attendees (event_id, attendee_email, response_status) VALUES ($1, $2, $3) ON CONFLICT (event_id, attendee_email) DO NOTHING',
+          [eventId, email, 'needsAction']
+        );
+      }
+      console.log(`✅ Guardados ${attendees.length} attendees para evento ${eventId}`);
+    } catch (error) {
+      console.error('❌ Error guardando attendees:', error);
+    }
+  }
+
+  /**
+   * Actualizar el status de respuesta de los attendees consultando la API
+   */
+  async updateAttendeeStatus(eventId: string) {
+    try {
+      this.ensureCalendarInitialized();
+
+      const response = await this.calendar.events.get({
+        calendarId: this.calendarId,
+        eventId: eventId,
+      });
+
+      const attendees = response.data.attendees || [];
+      for (const attendee of attendees) {
+        if (attendee.email) {
+          await query(
+            'UPDATE event_attendees SET response_status = $1, last_updated = NOW() WHERE event_id = $2 AND attendee_email = $3',
+            [attendee.responseStatus || 'needsAction', eventId, attendee.email]
+          );
+        }
+      }
+      console.log(`✅ Actualizado status de attendees para evento ${eventId}`);
+    } catch (error) {
+      console.error('❌ Error actualizando status de attendees:', error);
+    }
+  }
+
+  /**
+   * Verificar si un usuario ha aceptado al menos un evento previo
+   */
+  async checkUserVerified(email: string): Promise<boolean> {
+    try {
+      const result = await query(
+        'SELECT COUNT(*) as count FROM event_attendees WHERE attendee_email = $1 AND response_status = $2',
+        [email, 'accepted']
+      );
+      const count = parseInt(result.rows[0].count);
+      return count > 0;
+    } catch (error) {
+      console.error('❌ Error verificando usuario:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Enviar invitación inicial a un usuario para verificar aceptación
+   */
+  async sendInitialInvitation(email: string, summary: string = 'Verificación de Calendario', description: string = 'Por favor acepta esta invitación para recibir eventos automáticamente.') {
+    try {
+      const eventData = {
+        summary,
+        description,
+        startDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Mañana
+        endDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Mismo día
+        attendees: [email],
+        reminders: [{ minutes: 60 }]
+      };
+
+      const result = await this.createEvent(eventData);
+      if (result.success) {
+        console.log(`✅ Enviada invitación inicial a ${email}`);
+        return result;
+      } else {
+        console.error('❌ Error enviando invitación inicial:', result.error);
+        return result;
+      }
+    } catch (error) {
+      console.error('❌ Error en sendInitialInvitation:', error);
+      return { success: false, error: 'Error enviando invitación inicial' };
+    }
+  }
+
+  /**
+   * Obtener lista de usuarios verificados
+   */
+  async getVerifiedUsers(): Promise<string[]> {
+    try {
+      const result = await query(
+        'SELECT DISTINCT attendee_email FROM event_attendees WHERE response_status = $1',
+        ['accepted']
+      );
+      return result.rows.map(row => row.attendee_email);
+    } catch (error) {
+      console.error('❌ Error obteniendo usuarios verificados:', error);
+      return [];
     }
   }
 }
