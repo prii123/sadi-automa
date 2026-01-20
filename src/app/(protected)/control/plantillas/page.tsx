@@ -15,9 +15,12 @@ export default function PlantillasPage() {
   const [formData, setFormData] = useState({
     nombre: '',
     descripcion: '',
-    tipo: 'informe' as 'informe' | 'documento' | 'certificado' | 'otro',
+    tipo: 'informe' as 'informe' | 'documento' | 'certificado' | 'notificacion' | 'otro',
     contenido: '',
     variables: [] as string[],
+    formato_salida: 'pdf' as 'pdf' | 'docx' | 'html',
+    usa_datos_empresa: true,
+    usa_datos_usuario: false,
     activo: true
   });
 
@@ -77,6 +80,9 @@ export default function PlantillasPage() {
       tipo: plantilla.tipo,
       contenido: plantilla.contenido,
       variables: plantilla.variables || [],
+      formato_salida: (plantilla as any).formato_salida || 'pdf',
+      usa_datos_empresa: (plantilla as any).usa_datos_empresa ?? true,
+      usa_datos_usuario: (plantilla as any).usa_datos_usuario ?? false,
       activo: plantilla.activo
     });
     setShowForm(true);
@@ -112,9 +118,12 @@ export default function PlantillasPage() {
     setFormData({
       nombre: '',
       descripcion: '',
-      tipo: 'informe',
+      tipo: 'informe' as 'informe' | 'documento' | 'certificado' | 'notificacion' | 'otro',
       contenido: '',
       variables: [],
+      formato_salida: 'pdf' as 'pdf' | 'docx' | 'html',
+      usa_datos_empresa: true,
+      usa_datos_usuario: false,
       activo: true
     });
   };
@@ -122,15 +131,23 @@ export default function PlantillasPage() {
   const filteredPlantillas = plantillas.filter(plantilla => {
     const matchesSearch = plantilla.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (plantilla.descripcion && plantilla.descripcion.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesTipo = tipoFilter === 'todos' || plantilla.tipo === tipoFilter;
+    
+    // Normalizar el tipo de la plantilla para la comparación
+    const plantillaTipo = plantilla.tipo === 'otro' ? 'notificacion' : plantilla.tipo;
+    const matchesTipo = tipoFilter === 'todos' || plantillaTipo === tipoFilter;
+    
     return matchesSearch && matchesTipo;
   });
 
   const getTipoColor = (tipo: string) => {
-    switch (tipo) {
+    // Normalizar 'otro' a 'notificacion' para el display
+    const normalizedTipo = tipo === 'otro' ? 'notificacion' : tipo;
+    
+    switch (normalizedTipo) {
       case 'informe': return 'bg-blue-100 text-blue-800';
       case 'documento': return 'bg-green-100 text-green-800';
       case 'certificado': return 'bg-purple-100 text-purple-800';
+      case 'notificacion': return 'bg-orange-100 text-orange-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -146,7 +163,10 @@ export default function PlantillasPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Plantillas de Documentos</h1>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Plantillas Personalizables</h1>
+          <p className="text-gray-600 mt-2">Crea plantillas que se pueden generar automáticamente y adjuntar en los triggers</p>
+        </div>
         <button
           onClick={() => setShowForm(true)}
           className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
@@ -175,7 +195,7 @@ export default function PlantillasPage() {
           <option value="informe">Informes</option>
           <option value="documento">Documentos</option>
           <option value="certificado">Certificados</option>
-          <option value="otro">Otros</option>
+          <option value="notificacion">Notificaciones</option>
         </select>
       </div>
 
@@ -187,7 +207,7 @@ export default function PlantillasPage() {
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">{plantilla.nombre}</h3>
                 <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${getTipoColor(plantilla.tipo)}`}>
-                  {plantilla.tipo}
+                  {plantilla.tipo === 'otro' ? 'notificación' : plantilla.tipo}
                 </span>
               </div>
               <div className="flex items-center space-x-2">
@@ -209,28 +229,28 @@ export default function PlantillasPage() {
 
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={() => router.push(`/control/plantillas/${plantilla.id}/attachments`)}
-                className="flex-1 min-w-0 bg-purple-600 text-white px-3 py-2 rounded-md text-sm hover:bg-purple-700 focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-colors"
+                onClick={() => router.push(`/control/plantillas/${plantilla.id}/preview`)}
+                className="flex-1 min-w-0 bg-indigo-600 text-white px-3 py-2 rounded-md text-sm hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors"
               >
-                📎 Adjuntos
+                🔍 Vista Previa
               </button>
               <button
                 onClick={() => handleEditContent(plantilla)}
                 className="flex-1 min-w-0 bg-green-600 text-white px-3 py-2 rounded-md text-sm hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors"
               >
-                Editar Contenido
+                ✏️ Editar Contenido
               </button>
               <button
                 onClick={() => handleEdit(plantilla)}
                 className="flex-1 min-w-0 bg-blue-600 text-white px-3 py-2 rounded-md text-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
               >
-                Editar
+                ⚙️ Configurar
               </button>
               <button
                 onClick={() => handleDelete(plantilla.id!)}
                 className="px-3 py-2 bg-red-600 text-white rounded-md text-sm hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors"
               >
-                Eliminar
+                🗑️
               </button>
             </div>
           </div>
@@ -283,31 +303,79 @@ export default function PlantillasPage() {
                   <option value="informe">Informe</option>
                   <option value="documento">Documento</option>
                   <option value="certificado">Certificado</option>
-                  <option value="otro">Otro</option>
+                  <option value="notificacion">Notificación</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Contenido</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Formato de Salida</label>
+                <select
+                  value={formData.formato_salida}
+                  onChange={(e) => setFormData({ ...formData, formato_salida: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                >
+                  <option value="pdf">PDF</option>
+                  <option value="docx">Word (DOCX)</option>
+                  <option value="html">HTML</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Contenido de la Plantilla
+                  <span className="text-xs text-gray-500 ml-2">
+                    (Usa {'{{'} variable {'}}'} para campos dinámicos)
+                  </span>
+                </label>
                 <textarea
                   required
                   value={formData.contenido}
                   onChange={(e) => setFormData({ ...formData, contenido: e.target.value })}
-                  rows={10}
-                  placeholder="Escribe el contenido de la plantilla aquí..."
+                  rows={12}
+                  placeholder={`Ejemplo:\\n\\nEstimado {nombre_empresa},\\n\\nEl presente documento certifica que...\\n\\nFecha: {fecha_actual}\\nNIT: {nit_empresa}\\n\\nAtentamente,\\nSistema SADI`}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm text-gray-900"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Variables (una por línea)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-3">Variables Disponibles</label>
                 <textarea
                   value={formData.variables.join('\n')}
                   onChange={(e) => setFormData({ ...formData, variables: e.target.value.split('\n').filter(v => v.trim()) })}
-                  rows={3}
-                  placeholder="nombre_empresa&#10;fecha_actual&#10;nit_empresa"
+                  rows={4}
+                  placeholder="nombre_empresa\nfecha_actual\nnit_empresa\nnombre_usuario\nemail_empresa"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm text-gray-900"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Una variable por línea. Estas serán reemplazadas automáticamente al generar el documento.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="usa_datos_empresa"
+                    checked={formData.usa_datos_empresa}
+                    onChange={(e) => setFormData({ ...formData, usa_datos_empresa: e.target.checked })}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="usa_datos_empresa" className="ml-2 block text-sm text-gray-900">
+                    Incluir datos de empresa
+                  </label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="usa_datos_usuario"
+                    checked={formData.usa_datos_usuario}
+                    onChange={(e) => setFormData({ ...formData, usa_datos_usuario: e.target.checked })}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="usa_datos_usuario" className="ml-2 block text-sm text-gray-900">
+                    Incluir datos de usuario
+                  </label>
+                </div>
               </div>
 
               <div className="flex items-center">

@@ -5,14 +5,20 @@ import { SchedulerService } from '@/services/schedulerService';
 export async function GET(request: NextRequest) {
   try {
     const scheduler = SchedulerService.getInstance();
-    const status = scheduler.getStatus();
+    const status = scheduler.getDetailedStatus();
     
     return NextResponse.json({
       success: true,
       data: {
         ...status,
         serverTime: new Date().toISOString(),
-        healthy: status.isRunning && status.failureCount < 3
+        lastTriggerCheckAgo: `${Math.floor(status.timeSinceLastTriggerCheck / 1000)}s`,
+        health: status.isRunning && status.activeTasks > 0 && status.timeSinceLastTriggerCheck < 300000 
+          ? 'HEALTHY' 
+          : status.isRunning ? 'WARNING' : 'CRITICAL',
+        message: status.isRunning 
+          ? `Scheduler activo con ${status.activeTasks} tareas - último check hace ${Math.floor(status.timeSinceLastTriggerCheck / 1000)}s`
+          : 'Scheduler INACTIVO - Se requiere intervención'
       }
     });
   } catch (error) {

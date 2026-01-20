@@ -2,7 +2,6 @@ import * as cron from 'node-cron';
 import { TriggerService } from './triggerService';
 import { EmpresaService } from './empresaService';
 import { NotificacionService } from './notificacionService';
-import { DocumentAttachmentService } from './documentAttachmentService';
 import { emailService } from './emailService';
 import { Trigger, TriggerEjecucion } from '../models';
 
@@ -12,11 +11,19 @@ export class SchedulerService {
   private schedulerTasks: cron.ScheduledTask[] = [];
   private healthCheckInterval?: NodeJS.Timeout;
   private keepAliveInterval?: NodeJS.Timeout;
+  private watchdogInterval?: NodeJS.Timeout;
   private lastHealthCheck: Date = new Date();
+  private lastTriggerCheck: Date = new Date();
   private failureCount: number = 0;
-  private readonly MAX_FAILURES = 3;
+  private restartCount: number = 0;
+  private readonly MAX_FAILURES = 5;
+  private readonly WATCHDOG_INTERVAL = 15000; // 15 segundos
+  private readonly MAX_SILENCE_TIME = 300000; // 5 minutos sin actividad = problema crítico
 
-  private constructor() {}
+  private constructor() {
+    // Iniciar watchdog inmediatamente
+    this.startWatchdog();
+  }
 
   static getInstance(): SchedulerService {
     if (!SchedulerService.instance) {
@@ -27,53 +34,65 @@ export class SchedulerService {
 
   // Iniciar el scheduler
   start(): void {
-    if (this.isRunning) {
-      console.log('Scheduler ya está ejecutándose');
+    if (this.isRunning && this.schedulerTasks.length > 0) {
+      console.log('🟢 Scheduler ya está ejecutándose correctamente');
       return;
     }
 
-    console.log('🚀 Iniciando scheduler de triggers con keepalive...');
+    this.restartCount++;
+    console.log(`🚀 Iniciando scheduler de triggers (intento #${this.restartCount})...`);
 
     try {
       // Limpiar tareas anteriores si existen
       this.cleanup();
 
-      // Ejecutar cada minuto para verificar triggers
+      // Ejecutar cada minuto para verificar triggers con mayor tolerancia a errores
       const triggerTask = cron.schedule('* * * * *', async () => {
         try {
+          this.lastTriggerCheck = new Date();
           await this.checkAndExecuteTriggers();
           this.updateHealthCheck();
+          this.failureCount = 0; // Reset en éxito
         } catch (error) {
+          console.error('❌ Error en verificación de triggers:', error);
           this.handleFailure('triggers', error);
+          // NO detener el scheduler por un error, solo registrarlo
         }
+      }, {
+        timezone: 'America/Bogota'
       });
+      
+      if (!triggerTask) {
+        throw new Error('No se pudo crear la tarea de cron');
+      }
+      
       this.schedulerTasks.push(triggerTask);
+      triggerTask.start();
 
-      // Ejecutar limpieza de archivos temporales cada hora
-      const cleanupTask = cron.schedule('0 * * * *', async () => {
-        try {
-          await DocumentAttachmentService.cleanupOldTemporaryFiles();
-          console.log('🧹 Limpieza de archivos temporales completada');
-        } catch (error) {
-          console.error('❌ Error limpiando archivos temporales:', error);
-        }
-      });
-      this.schedulerTasks.push(cleanupTask);
-
-      // Health check cada 5 minutos
+      // Health check cada 2 minutos (más frecuente)
       this.healthCheckInterval = setInterval(() => {
-        this.performHealthCheck();
-      }, 5 * 60 * 1000);
+        try {
+          this.performHealthCheck();
+        } catch (error) {
+          console.error('❌ Error en health check:', error);
+        }
+      }, 2 * 60 * 1000);
 
-      // KeepAlive cada 30 segundos
+      // KeepAlive cada 15 segundos (más agresivo)
       this.keepAliveInterval = setInterval(() => {
-        this.keepAlive();
-      }, 30 * 1000);
+        try {
+          this.keepAlive();
+        } catch (error) {
+          console.error('❌ Error en keepAlive:', error);
+          this.emergencyRestart();
+        }
+      }, 15 * 1000);
 
       this.isRunning = true;
       this.updateHealthCheck();
-      console.log('✅ Scheduler iniciado correctamente con monitoreo de salud');
-      console.log('📊 Health check cada 5 minutos, KeepAlive cada 30 segundos');
+      console.log('✅ Scheduler iniciado correctamente con sistema ultra-robusto');
+      console.log('📊 Health check cada 2 min, KeepAlive cada 15s, Watchdog cada 15s');
+      console.log(`🔢 Tareas activas: ${this.schedulerTasks.length}`);
       
     } catch (error) {
       console.error('❌ Error crítico iniciando scheduler:', error);
@@ -96,25 +115,35 @@ export class SchedulerService {
 
   // Limpiar todos los recursos
   private cleanup(): void {
-    // Detener todas las tareas de cron
-    this.schedulerTasks.forEach(task => {
+    console.log('🧹 Limpiando recursos del scheduler...');
+    
+    // Detener todas las tareas de cron de forma segura
+    this.schedulerTasks.forEach((task, index) => {
       try {
-        task.destroy();
+        if (task && typeof task.destroy === 'function') {
+          task.destroy();
+          console.log(`✅ Tarea de cron ${index} detenida`);
+        }
       } catch (error) {
-        console.warn('⚠️ Error deteniendo tarea de cron:', error);
+        console.warn(`⚠️ Error deteniendo tarea de cron ${index}:`, error);
       }
     });
     this.schedulerTasks = [];
 
-    // Limpiar intervalos
+    // Limpiar intervalos de forma segura
     if (this.healthCheckInterval) {
       clearInterval(this.healthCheckInterval);
       this.healthCheckInterval = undefined;
+      console.log('✅ Health check interval limpiado');
     }
+    
     if (this.keepAliveInterval) {
       clearInterval(this.keepAliveInterval);
       this.keepAliveInterval = undefined;
+      console.log('✅ KeepAlive interval limpiado');
     }
+    
+    // NO limpiar el watchdog - debe mantenerse siempre activo
   }
 
   // Verificar y ejecutar triggers que cumplan las condiciones
@@ -155,50 +184,106 @@ export class SchedulerService {
     }
   }
 
-  // Nuevo: Método para mantener el scheduler vivo
+  // Método para mantener el scheduler vivo - Ultra Agresivo
   private keepAlive(): void {
-    if (!this.isRunning) {
-      console.log('🔄 Scheduler detectado como inactivo, reiniciando...');
-      this.restart();
-      return;
-    }
-
-    // Verificar que las tareas de cron estén activas
-    if (this.schedulerTasks.length === 0) {
-      console.log('⚠️ No hay tareas de cron activas, reiniciando scheduler...');
-      this.restart();
-      return;
-    }
-
-    // KeepAlive silencioso cada 30 segundos (solo log cada 10 minutos)
     const now = new Date();
-    if (now.getMinutes() % 10 === 0 && now.getSeconds() < 30) {
-      console.log(`💚 Scheduler KeepAlive - ${this.schedulerTasks.length} tareas activas a las ${now.toLocaleTimeString()}`);
+    
+    // Verificación 1: ¿Está marcado como corriendo?
+    if (!this.isRunning) {
+      console.log('🔄 KeepAlive: Scheduler detectado como inactivo, reiniciando...');
+      this.start();
+      return;
+    }
+
+    // Verificación 2: ¿Hay tareas de cron activas?
+    if (this.schedulerTasks.length === 0) {
+      console.error('⚠️ KeepAlive: No hay tareas de cron activas, forzando reinicio...');
+      this.emergencyRestart();
+      return;
+    }
+
+    // Verificación 3: ¿Las tareas están realmente ejecutándose?
+    let tasksRunning = 0;
+    this.schedulerTasks.forEach((task, index) => {
+      try {
+        // Si la tarea existe y tiene el método running, verificar
+        if (task && typeof task.getStatus === 'function') {
+          const status = task.getStatus();
+          if (status === 'scheduled' || status === 'running') {
+            tasksRunning++;
+          }
+        } else if (task) {
+          // Asumir que está corriendo si existe
+          tasksRunning++;
+        }
+      } catch (error) {
+        console.warn(`⚠️ KeepAlive: Error verificando tarea ${index}:`, error);
+      }
+    });
+
+    if (tasksRunning === 0) {
+      console.error('⚠️ KeepAlive: Ninguna tarea de cron está ejecutándose!');
+      this.emergencyRestart();
+      return;
+    }
+
+    // Verificación 4: ¿Ha habido actividad reciente?
+    const timeSinceLastCheck = now.getTime() - this.lastTriggerCheck.getTime();
+    if (timeSinceLastCheck > 180000) { // 3 minutos sin actividad
+      console.warn(`⚠️ KeepAlive: Sin actividad por ${Math.floor(timeSinceLastCheck/1000)}s, verificando salud...`);
+      this.performHealthCheck();
+    }
+
+    // Log periódico de estado (cada 5 minutos)
+    if (now.getMinutes() % 5 === 0 && now.getSeconds() < 15) {
+      console.log(`💪 KeepAlive: OK - ${tasksRunning}/${this.schedulerTasks.length} tareas activas, última actividad hace ${Math.floor(timeSinceLastCheck/1000)}s`);
     }
   }
 
-  // Nuevo: Health check del scheduler
+  // Health check del scheduler - Verificación completa
   private performHealthCheck(): void {
     const now = new Date();
     const timeSinceLastCheck = now.getTime() - this.lastHealthCheck.getTime();
+    const timeSinceLastTrigger = now.getTime() - this.lastTriggerCheck.getTime();
     
-    console.log(`🏥 Health Check - Último check: ${Math.floor(timeSinceLastCheck / 1000)}s ago`);
+    console.log(`🏥 Health Check Completo:`);
+    console.log(`  - isRunning: ${this.isRunning}`);
+    console.log(`  - Tareas activas: ${this.schedulerTasks.length}`);
+    console.log(`  - Último health check: ${Math.floor(timeSinceLastCheck / 1000)}s atrás`);
+    console.log(`  - Última verificación de triggers: ${Math.floor(timeSinceLastTrigger / 1000)}s atrás`);
+    console.log(`  - Fallos acumulados: ${this.failureCount}/${this.MAX_FAILURES}`);
+    console.log(`  - Reinicios: ${this.restartCount}`);
     
-    // Si han pasado más de 10 minutos sin health check, hay un problema
-    if (timeSinceLastCheck > 10 * 60 * 1000) {
-      console.error('🚨 Health Check CRÍTICO: Scheduler posiblemente bloqueado');
-      this.handleCriticalFailure(new Error('Scheduler no responde desde hace más de 10 minutos'));
+    // Verificación crítica: Si han pasado más de 10 minutos sin health check, hay un problema serio
+    if (timeSinceLastCheck > 600000) { // 10 minutos
+      console.error('🚨 Health Check CRÍTICO: Scheduler posiblemente bloqueado por más de 10 minutos');
+      this.handleCriticalFailure(new Error('Scheduler bloqueado por más de 10 minutos'));
       return;
     }
 
-    // Verificar que el scheduler esté realmente funcionando
-    if (!this.isRunning || this.schedulerTasks.length === 0) {
-      console.warn('⚠️ Health Check: Scheduler no está ejecutándose correctamente');
-      this.restart();
+    // Verificación de tareas zombie
+    if (!this.isRunning && this.schedulerTasks.length > 0) {
+      console.warn('⚠️ Health Check: Tareas zombie detectadas (scheduler inactivo pero tareas existen)');
+      this.cleanup();
+    }
+
+    // Verificación de estado inconsistente
+    if (this.isRunning && this.schedulerTasks.length === 0) {
+      console.error('⚠️ Health Check: Estado inconsistente (scheduler activo sin tareas)');
+      this.emergencyRestart();
       return;
     }
 
-    console.log(`✅ Health Check OK - ${this.schedulerTasks.length} tareas activas, errores: ${this.failureCount}`);
+    // Verificación de inactividad prolongada
+    if (this.isRunning && timeSinceLastTrigger > 300000) { // 5 minutos sin trigger check
+      console.error(`⚠️ Health Check: Inactividad prolongada (${Math.floor(timeSinceLastTrigger/1000)}s sin verificar triggers)`);
+      this.emergencyRestart();
+      return;
+    }
+
+    // Si llegamos aquí, todo está bien
+    console.log(`✅ Health Check EXITOSO - Sistema funcionando correctamente`);
+    this.updateHealthCheck();
   }
 
   // Nuevo: Actualizar timestamp del health check
@@ -218,15 +303,23 @@ export class SchedulerService {
     }
   }
 
-  // Nuevo: Manejar fallos críticos
+  // Manejo de fallos críticos - Más robusto
   private handleCriticalFailure(error: any): void {
-    console.error('🚨 FALLO CRÍTICO del scheduler:', error);
     this.failureCount = this.MAX_FAILURES;
+    console.error('🚨 FALLO CRÍTICO del scheduler:', error?.message || error);
     
-    setTimeout(() => {
-      console.log('🔄 Intentando recuperación automática...');
-      this.restart();
-    }, 5000); // Esperar 5 segundos antes de reintentar
+    // Registrar el fallo para debugging
+    console.error('Stack trace:', error?.stack);
+    console.error('Estado actual:', {
+      isRunning: this.isRunning,
+      tasksCount: this.schedulerTasks.length,
+      failureCount: this.failureCount,
+      restartCount: this.restartCount
+    });
+    
+    // No esperar, reiniciar inmediatamente
+    console.log('🔄 Iniciando recuperación inmediata...');
+    this.emergencyRestart();
   }
 
   // Nuevo: Reiniciar el scheduler
@@ -278,23 +371,6 @@ export class SchedulerService {
     } catch (error) {
       console.error('💀 FALLO TOTAL del scheduler - se requiere reinicio manual:', error);
     }
-  }
-
-  // Nuevo: Obtener estado del scheduler
-  getStatus(): {
-    isRunning: boolean;
-    activeTasks: number;
-    lastHealthCheck: Date;
-    failureCount: number;
-    uptime: number;
-  } {
-    return {
-      isRunning: this.isRunning,
-      activeTasks: this.schedulerTasks.length,
-      lastHealthCheck: this.lastHealthCheck,
-      failureCount: this.failureCount,
-      uptime: Date.now() - this.lastHealthCheck.getTime()
-    };
   }
 
   // Determinar si un trigger debe ejecutarse ahora
@@ -584,24 +660,12 @@ export class SchedulerService {
 
       console.log(`📧 Enviando correo de trigger a ${destinatarios.length} destinatario(s): ${destinatarios.join(', ')}`);
 
-      // Enviar correo con o sin adjuntos según configuración
-      let exito = false;
-      
-      if (trigger.template_id && trigger.document_type) {
-        // Enviar con adjuntos del tipo de documento especificado
-        exito = await emailService.sendEmailWithDocumentAttachments({
-          to: destinatarios,
-          subject: `📊 Trigger Ejecutado: ${trigger.nombre}`,
-          html: contenidoHTML
-        }, trigger.template_id, trigger.document_type);
-      } else {
-        // Enviar sin adjuntos
-        exito = await emailService.sendEmail({
-          to: destinatarios,
-          subject: `📊 Trigger Ejecutado: ${trigger.nombre}`,
-          html: contenidoHTML
-        });
-      }
+      // Enviar correo simple sin adjuntos
+      const exito = await emailService.sendEmail({
+        to: destinatarios,
+        subject: `📊 Trigger Ejecutado: ${trigger.nombre}`,
+        html: contenidoHTML
+      });
 
       if (!exito) {
         throw new Error('Error enviando el correo del trigger');
@@ -805,4 +869,126 @@ export class SchedulerService {
       return { success: false, error: (error as Error).message };
     }
   }
+
+  // Sistema Watchdog Ultra-Robusto
+  private startWatchdog(): void {
+    if (this.watchdogInterval) {
+      clearInterval(this.watchdogInterval);
+    }
+
+    this.watchdogInterval = setInterval(() => {
+      this.watchdogCheck();
+    }, this.WATCHDOG_INTERVAL);
+
+    console.log('🐕 Watchdog iniciado - supervisión cada 15 segundos');
+  }
+
+  private watchdogCheck(): void {
+    const now = new Date();
+    const timeSinceLastCheck = now.getTime() - this.lastTriggerCheck.getTime();
+    
+    // Si el scheduler dice que está corriendo pero no hay tareas, problema crítico
+    if (this.isRunning && this.schedulerTasks.length === 0) {
+      console.error('🚨 WATCHDOG: Scheduler marcado como activo pero sin tareas!');
+      this.emergencyRestart();
+      return;
+    }
+
+    // Si ha pasado mucho tiempo sin verificación de triggers, problema crítico
+    if (this.isRunning && timeSinceLastCheck > this.MAX_SILENCE_TIME) {
+      console.error(`🚨 WATCHDOG: Sin actividad por ${Math.floor(timeSinceLastCheck/1000)}s!`);
+      this.emergencyRestart();
+      return;
+    }
+
+    // Si no está corriendo, intentar iniciarlo
+    if (!this.isRunning) {
+      console.log('🐕 WATCHDOG: Scheduler detenido, reiniciando...');
+      this.start();
+      return;
+    }
+
+    // Verificación silenciosa cada minuto
+    if (now.getMinutes() % 1 === 0 && now.getSeconds() < 15) {
+      console.log(`🐕 WATCHDOG: OK - ${this.schedulerTasks.length} tareas, último check hace ${Math.floor(timeSinceLastCheck/1000)}s`);
+    }
+  }
+
+  // Reinicio de emergencia
+  private emergencyRestart(): void {
+    console.log('🆘 REINICIO DE EMERGENCIA iniciado...');
+    
+    try {
+      // Forzar limpieza completa
+      this.isRunning = false;
+      this.cleanup();
+      
+      // Esperar un momento para asegurar limpieza
+      setTimeout(() => {
+        console.log('🆘 Reiniciando scheduler después de emergencia...');
+        this.start();
+      }, 1000);
+      
+    } catch (error) {
+      console.error('💀 FALLO TOTAL en reinicio de emergencia:', error);
+      
+      // Último recurso: reinicio completo después de 5 segundos
+      setTimeout(() => {
+        console.log('💀 ÚLTIMO RECURSO: Reinicio completo forzado...');
+        this.forceCompleteRestart();
+      }, 5000);
+    }
+  }
+
+  // Reinicio completo forzado
+  private forceCompleteRestart(): void {
+    try {
+      // Limpiar TODO forzadamente
+      this.schedulerTasks = [];
+      this.isRunning = false;
+      this.failureCount = 0;
+      this.restartCount = 0;
+      
+      // Limpiar todos los intervalos
+      if (this.healthCheckInterval) clearInterval(this.healthCheckInterval);
+      if (this.keepAliveInterval) clearInterval(this.keepAliveInterval);
+      // NO limpiar watchdog
+      
+      this.healthCheckInterval = undefined;
+      this.keepAliveInterval = undefined;
+
+      // Reiniciar desde cero
+      console.log('💀 REINICIO COMPLETO ejecutado');
+      this.start();
+      
+    } catch (error) {
+      console.error('☠️ FALLO CATASTRÓFICO - Watchdog continuará intentando...', error);
+    }
+  }
+
+  // Estado detallado para debugging
+  getDetailedStatus(): {
+    isRunning: boolean;
+    activeTasks: number;
+    lastHealthCheck: Date;
+    lastTriggerCheck: Date;
+    failureCount: number;
+    restartCount: number;
+    timeSinceLastTriggerCheck: number;
+    hasWatchdog: boolean;
+  } {
+    const now = new Date();
+    return {
+      isRunning: this.isRunning,
+      activeTasks: this.schedulerTasks.length,
+      lastHealthCheck: this.lastHealthCheck,
+      lastTriggerCheck: this.lastTriggerCheck,
+      failureCount: this.failureCount,
+      restartCount: this.restartCount,
+      timeSinceLastTriggerCheck: now.getTime() - this.lastTriggerCheck.getTime(),
+      hasWatchdog: !!this.watchdogInterval
+    };
+  }
+
+
 }

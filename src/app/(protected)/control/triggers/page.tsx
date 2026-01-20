@@ -10,7 +10,7 @@ export default function TriggersPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingTrigger, setEditingTrigger] = useState<Trigger | null>(null);
   const [selectedTrigger, setSelectedTrigger] = useState<Trigger | null>(null);
-  const [schedulerStatus, setSchedulerStatus] = useState<{ isRunning: boolean } | null>(null);
+  const [schedulerStatus, setSchedulerStatus] = useState<any | null>(null);
   const [plantillas, setPlantillas] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     nombre: '',
@@ -54,6 +54,12 @@ export default function TriggersPage() {
     fetchPlantillas();
   }, []);
 
+  // Actualizar estado del scheduler cada 15 segundos
+  useEffect(() => {
+    const interval = setInterval(fetchSchedulerStatus, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
   const fetchTriggers = async () => {
     try {
       const response = await fetch('/api/triggers');
@@ -70,13 +76,14 @@ export default function TriggersPage() {
 
   const fetchSchedulerStatus = async () => {
     try {
-      const response = await fetch('/api/scheduler');
+      const response = await fetch('/api/scheduler/status');
       const data = await response.json();
       if (data.success) {
         setSchedulerStatus(data.data);
       }
     } catch (error) {
       console.error('Error obteniendo estado del scheduler:', error);
+      setSchedulerStatus(null);
     }
   };
 
@@ -216,7 +223,25 @@ export default function TriggersPage() {
 
   const handleSchedulerAction = async (action: string) => {
     try {
-      const response = await fetch('/api/scheduler', {
+      if (action === 'recalculate') {
+        // Acción especial para recalcular
+        const response = await fetch('/api/scheduler/recalculate', {
+          method: 'POST',
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+          alert(`✅ ${data.message} - ${data.updated} triggers actualizados`);
+          fetchSchedulerStatus();
+          fetchTriggers();
+        } else {
+          alert(`❌ ${data.error}`);
+        }
+        return;
+      }
+
+      // Para restart, start, stop
+      const response = await fetch('/api/scheduler/status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action })
@@ -224,17 +249,18 @@ export default function TriggersPage() {
 
       const data = await response.json();
       if (data.success) {
-        alert(data.message || `Acción "${action}" ejecutada correctamente`);
-        fetchSchedulerStatus();
-        if (action === 'recalculate') {
+        alert(`✅ ${data.message}`);
+        // Esperar un poco para que el scheduler se reinicie
+        setTimeout(() => {
+          fetchSchedulerStatus();
           fetchTriggers();
-        }
+        }, 2000);
       } else {
-        alert(data.error || 'Error ejecutando acción');
+        alert(`❌ ${data.error || 'Error ejecutando acción'}`);
       }
     } catch (error) {
       console.error('Error ejecutando acción del scheduler:', error);
-      alert('Error de conexión');
+      alert('❌ Error de conexión');
     }
   };
 
@@ -263,14 +289,78 @@ export default function TriggersPage() {
 
   return (
     <div className="space-y-6">
+      {/* Estado detallado del Scheduler */}
+      {schedulerStatus && (
+        <div className={`rounded-lg p-4 border-l-4 ${
+          schedulerStatus.health === 'HEALTHY' ? 'bg-green-50 border-green-400' :
+          schedulerStatus.health === 'WARNING' ? 'bg-yellow-50 border-yellow-400' :
+          'bg-red-50 border-red-400'
+        }`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className={`w-3 h-3 rounded-full ${
+                schedulerStatus.health === 'HEALTHY' ? 'bg-green-500 animate-pulse' :
+                schedulerStatus.health === 'WARNING' ? 'bg-yellow-500' :
+                'bg-red-500'
+              }`}></div>
+              <div>
+                <h3 className={`font-medium ${
+                  schedulerStatus.health === 'HEALTHY' ? 'text-green-800' :
+                  schedulerStatus.health === 'WARNING' ? 'text-yellow-800' :
+                  'text-red-800'
+                }`}>
+                  Estado del Scheduler: {schedulerStatus.health}
+                </h3>
+                <p className={`text-sm ${
+                  schedulerStatus.health === 'HEALTHY' ? 'text-green-600' :
+                  schedulerStatus.health === 'WARNING' ? 'text-yellow-600' :
+                  'text-red-600'
+                }`}>
+                  {schedulerStatus.message}
+                </p>
+              </div>
+            </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => handleSchedulerAction('restart')}
+                className="bg-yellow-600 text-white px-3 py-1 rounded text-sm hover:bg-yellow-700"
+                title="Reiniciar Scheduler"
+              >
+                🔄 Reiniciar
+              </button>
+              <button
+                onClick={fetchSchedulerStatus}
+                className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                title="Actualizar estado"
+              >
+                📊 Actualizar
+              </button>
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+            <div>
+              <span className="text-gray-500">Tareas Activas:</span>
+              <span className="ml-1 font-medium">{schedulerStatus.activeTasks}</span>
+            </div>
+            <div>
+              <span className="text-gray-500">Último Check:</span>
+              <span className="ml-1 font-medium">{schedulerStatus.lastTriggerCheckAgo}</span>
+            </div>
+            <div>
+              <span className="text-gray-500">Reinicios:</span>
+              <span className="ml-1 font-medium">{schedulerStatus.restartCount}</span>
+            </div>
+            <div>
+              <span className="text-gray-500">Errores:</span>
+              <span className="ml-1 font-medium">{schedulerStatus.failureCount}/{schedulerStatus.failureCount >= 5 ? '5' : '5'}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Gestión de Triggers</h1>
-          {schedulerStatus && (
-            <p className={`text-sm mt-1 ${schedulerStatus.isRunning ? 'text-green-600' : 'text-red-600'}`}>
-              Scheduler: {schedulerStatus.isRunning ? '🟢 Ejecutándose' : '🔴 Detenido'}
-            </p>
-          )}
         </div>
         <div className="flex space-x-2">
           <button
@@ -280,14 +370,6 @@ export default function TriggersPage() {
           >
             🔄 Recalcular
           </button>
-          {schedulerStatus && !schedulerStatus.isRunning && (
-            <button
-              onClick={() => handleSchedulerAction('start')}
-              className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors"
-            >
-              ▶️ Iniciar Scheduler
-            </button>
-          )}
           <button
             onClick={() => setShowForm(true)}
             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"

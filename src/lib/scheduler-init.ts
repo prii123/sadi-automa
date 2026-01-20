@@ -65,7 +65,7 @@ export function initializeScheduler() {
 function ensureSchedulerRunning() {
   try {
     const scheduler = SchedulerService.getInstance();
-    const status = scheduler.getStatus();
+    const status = scheduler.getDetailedStatus();
     
     if (!status.isRunning || status.failureCount >= 3) {
       console.log('🔄 Scheduler detectado como inactivo, reiniciando...');
@@ -86,7 +86,7 @@ export function getSchedulerStatus() {
 
   try {
     const scheduler = SchedulerService.getInstance();
-    return scheduler.getStatus();
+    return scheduler.getDetailedStatus();
   } catch (error) {
     return { isRunning: false, error: (error as Error).message };
   }
