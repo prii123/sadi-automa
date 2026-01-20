@@ -11,3 +11,4 @@ export * from './documentoService';
 export * from './emailService';
 export * from './roleService';
 export * from './plantillaService';
+export * from './documentAttachmentService';

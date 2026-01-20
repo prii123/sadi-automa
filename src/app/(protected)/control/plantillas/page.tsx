@@ -207,16 +207,22 @@ export default function PlantillasPage() {
               )}
             </div>
 
-            <div className="flex space-x-2">
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => router.push(`/control/plantillas/${plantilla.id}/attachments`)}
+                className="flex-1 min-w-0 bg-purple-600 text-white px-3 py-2 rounded-md text-sm hover:bg-purple-700 focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-colors"
+              >
+                📎 Adjuntos
+              </button>
               <button
                 onClick={() => handleEditContent(plantilla)}
-                className="flex-1 bg-green-600 text-white px-3 py-2 rounded-md text-sm hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors"
+                className="flex-1 min-w-0 bg-green-600 text-white px-3 py-2 rounded-md text-sm hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors"
               >
                 Editar Contenido
               </button>
               <button
                 onClick={() => handleEdit(plantilla)}
-                className="flex-1 bg-blue-600 text-white px-3 py-2 rounded-md text-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+                className="flex-1 min-w-0 bg-blue-600 text-white px-3 py-2 rounded-md text-sm hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
               >
                 Editar
               </button>

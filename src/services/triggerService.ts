@@ -9,9 +9,9 @@ export class TriggerService {
       const result = await client.query(`
         INSERT INTO triggers (
           nombre, descripcion, frecuencia, hora, dias_semana, dia_mes,
-          intervalo_horas, destinatarios, prioridades, activo, ultima_ejecucion, proxima_ejecucion,
+          intervalo_horas, destinatarios, prioridades, template_id, document_type, activo, ultima_ejecucion, proxima_ejecucion,
           creado_en, actualizado_en
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING *
       `, [
         trigger.nombre,
@@ -23,6 +23,8 @@ export class TriggerService {
         trigger.intervalo_horas,
         trigger.destinatarios,
         trigger.prioridades,
+        trigger.template_id,
+        trigger.document_type,
         trigger.activo,
         trigger.ultima_ejecucion,
         trigger.proxima_ejecucion,
@@ -120,6 +122,16 @@ export class TriggerService {
       if (trigger.prioridades !== undefined) {
         fields.push(`prioridades = $${paramCount}`);
         values.push(trigger.prioridades);
+        paramCount++;
+      }
+      if (trigger.template_id !== undefined) {
+        fields.push(`template_id = $${paramCount}`);
+        values.push(trigger.template_id);
+        paramCount++;
+      }
+      if (trigger.document_type !== undefined) {
+        fields.push(`document_type = $${paramCount}`);
+        values.push(trigger.document_type);
         paramCount++;
       }
       if (trigger.activo !== undefined) {

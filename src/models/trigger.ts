@@ -21,6 +21,8 @@ export interface Trigger {
   intervalo_horas?: number;
   destinatarios: string; // Emails separados por comas
   prioridades: string; // "CRITICA,ALTA,MEDIA"
+  document_type?: string; // Tipo de documento para adjuntos: "renovar", "resolucion", "soporte", "certificado", "general"
+  template_id?: number; // ID de plantilla para adjuntos
   activo: number; // 0 o 1
   ultima_ejecucion?: string;
   proxima_ejecucion?: string;

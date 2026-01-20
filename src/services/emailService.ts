@@ -1,14 +1,23 @@
 import * as nodemailer from 'nodemailer';
 import * as dotenv from 'dotenv';
+import { DocumentAttachmentService } from './documentAttachmentService';
 
 // Cargar variables de entorno
 dotenv.config();
+
+interface EmailAttachment {
+  filename: string;
+  path?: string;
+  content?: Buffer;
+  contentType?: string;
+}
 
 interface EmailOptions {
   to: string | string[];
   subject: string;
   html?: string;
   text?: string;
+  attachments?: EmailAttachment[];
 }
 
 class EmailService {
@@ -44,7 +53,7 @@ class EmailService {
    */
   async sendEmail(options: EmailOptions): Promise<boolean> {
     try {
-      const mailOptions = {
+      const mailOptions: any = {
         from: `"SADI Automatizaciones" <${process.env.SMTP_USER}>`,
         to: options.to,
         subject: options.subject,
@@ -52,18 +61,113 @@ class EmailService {
         text: options.text,
       };
 
+      // Agregar adjuntos si existen
+      if (options.attachments && options.attachments.length > 0) {
+        mailOptions.attachments = options.attachments;
+        console.log(`📎 Enviando correo con ${options.attachments.length} adjunto(s)`);
+      }
+
       const info = await this.transporter.sendMail(mailOptions);
       console.log('✅ Correo enviado:', info.messageId);
+
+      // Limpiar archivos temporales después del envío exitoso
+      if (options.attachments) {
+        for (const attachment of options.attachments) {
+          if (attachment.path) {
+            // Extraer el nombre del archivo de la ruta
+            const fileName = attachment.path.split(/[\\/]/).pop();
+            if (fileName) {
+              await DocumentAttachmentService.deleteTemporaryFile(fileName);
+            }
+          }
+        }
+      }
+
       return true;
     } catch (error) {
       console.error('❌ Error enviando correo:', error);
+
+      // Limpiar archivos temporales incluso si falló el envío
+      if (options.attachments) {
+        for (const attachment of options.attachments) {
+          if (attachment.path) {
+            const fileName = attachment.path.split(/[\\/]/).pop();
+            if (fileName) {
+              await DocumentAttachmentService.deleteTemporaryFile(fileName);
+            }
+          }
+        }
+      }
+
       return false;
     }
   }
 
   /**
-   * Envía una notificación de documento próximo a vencer
+   * Obtiene adjuntos para un tipo de documento específico
    */
+  async getDocumentAttachments(templateId: number, documentType: string): Promise<EmailAttachment[]> {
+    try {
+      const attachmentsResult = await DocumentAttachmentService.getByDocumentType(templateId, documentType);
+      
+      if (!attachmentsResult.success || !attachmentsResult.data) {
+        return [];
+      }
+
+      const emailAttachments: EmailAttachment[] = [];
+
+      for (const attachment of attachmentsResult.data) {
+        try {
+          // Verificar si el archivo temporal existe
+          const fileExists = await DocumentAttachmentService.temporaryFileExists(attachment.file_name);
+          
+          if (fileExists) {
+            const filePath = await DocumentAttachmentService.getTemporaryFilePath(attachment.file_name);
+            
+            emailAttachments.push({
+              filename: attachment.original_name,
+              path: filePath,
+              contentType: attachment.mime_type
+            });
+          } else {
+            console.warn(`⚠️ Archivo adjunto no encontrado: ${attachment.file_name}`);
+          }
+        } catch (error) {
+          console.error(`❌ Error procesando adjunto ${attachment.file_name}:`, error);
+        }
+      }
+
+      return emailAttachments;
+    } catch (error) {
+      console.error('❌ Error obteniendo adjuntos:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Envía un correo electrónico con adjuntos por tipo de documento
+   */
+  async sendEmailWithDocumentAttachments(
+    options: EmailOptions,
+    templateId: number,
+    documentType: string
+  ): Promise<boolean> {
+    try {
+      // Obtener adjuntos para el tipo de documento
+      const attachments = await this.getDocumentAttachments(templateId, documentType);
+      
+      // Combinar adjuntos existentes con los nuevos
+      const allAttachments = [...(options.attachments || []), ...attachments];
+
+      return this.sendEmail({
+        ...options,
+        attachments: allAttachments
+      });
+    } catch (error) {
+      console.error('❌ Error enviando correo con adjuntos:', error);
+      return false;
+    }
+  }
   async sendDocumentoProximoVencer(
     destinatario: string,
     empresaNombre: string,

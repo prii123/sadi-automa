@@ -11,6 +11,7 @@ export default function TriggersPage() {
   const [editingTrigger, setEditingTrigger] = useState<Trigger | null>(null);
   const [selectedTrigger, setSelectedTrigger] = useState<Trigger | null>(null);
   const [schedulerStatus, setSchedulerStatus] = useState<{ isRunning: boolean } | null>(null);
+  const [plantillas, setPlantillas] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     nombre: '',
     descripcion: '',
@@ -21,6 +22,8 @@ export default function TriggersPage() {
     intervalo_horas: '',
     destinatarios: '',
     prioridades: 'CRITICA,ALTA,MEDIA',
+    template_id: '',
+    document_type: '',
     activo: 1
   });
 
@@ -48,6 +51,7 @@ export default function TriggersPage() {
   useEffect(() => {
     fetchTriggers();
     fetchSchedulerStatus();
+    fetchPlantillas();
   }, []);
 
   const fetchTriggers = async () => {
@@ -76,6 +80,18 @@ export default function TriggersPage() {
     }
   };
 
+  const fetchPlantillas = async () => {
+    try {
+      const response = await fetch('/api/plantillas');
+      const data = await response.json();
+      if (data.success) {
+        setPlantillas(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error cargando plantillas:', error);
+    }
+  };
+
   const fetchEjecuciones = async (triggerId: number) => {
     try {
       const response = await fetch(`/api/triggers/${triggerId}/ejecuciones`);
@@ -95,6 +111,8 @@ export default function TriggersPage() {
         ...formData,
         dia_mes: formData.dia_mes ? parseInt(formData.dia_mes) : undefined,
         intervalo_horas: formData.intervalo_horas ? parseInt(formData.intervalo_horas) : undefined,
+        template_id: formData.template_id ? parseInt(formData.template_id) : undefined,
+        document_type: formData.document_type || undefined,
         activo: formData.activo ? 1 : 0
       };
 
@@ -119,6 +137,8 @@ export default function TriggersPage() {
           intervalo_horas: '',
           destinatarios: '',
           prioridades: 'CRITICA,ALTA,MEDIA',
+          template_id: '',
+          document_type: '',
           activo: 1
         });
         setShowForm(false);
@@ -144,6 +164,8 @@ export default function TriggersPage() {
       intervalo_horas: trigger.intervalo_horas?.toString() || '',
       destinatarios: trigger.destinatarios,
       prioridades: trigger.prioridades,
+      template_id: trigger.template_id?.toString() || '',
+      document_type: trigger.document_type || '',
       activo: trigger.activo
     });
     setShowForm(true);
@@ -184,6 +206,8 @@ export default function TriggersPage() {
       intervalo_horas: '',
       destinatarios: '',
       prioridades: 'CRITICA,ALTA,MEDIA',
+      template_id: '',
+      document_type: '',
       activo: 1
     });
     setEditingTrigger(null);
@@ -360,6 +384,57 @@ export default function TriggersPage() {
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                   placeholder="CRITICA,ALTA,MEDIA"
                 />
+              </div>
+
+              {/* Sección de Adjuntos */}
+              <div className="border-t pt-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-3">📎 Adjuntos Automáticos</h3>
+                <p className="text-sm text-gray-600 mb-4">Configura adjuntos PDF que se enviarán automáticamente con las notificaciones</p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900 mb-1">Plantilla</label>
+                    <select
+                      value={formData.template_id}
+                      onChange={(e) => setFormData({...formData, template_id: e.target.value, document_type: ''})}
+                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                    >
+                      <option value="">Sin adjuntos</option>
+                      {plantillas.map(plantilla => (
+                        <option key={plantilla.id} value={plantilla.id}>
+                          {plantilla.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {formData.template_id && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-900 mb-1">Tipo de Documento</label>
+                      <select
+                        value={formData.document_type}
+                        onChange={(e) => setFormData({...formData, document_type: e.target.value})}
+                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                        required={!!formData.template_id}
+                      >
+                        <option value="">Seleccionar tipo</option>
+                        <option value="general">📄 General</option>
+                        <option value="renovar">🔄 Renovación</option>
+                        <option value="resolucion">⚖️ Resolución</option>
+                        <option value="soporte">🔧 Soporte</option>
+                        <option value="certificado">🏆 Certificado</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {formData.template_id && formData.document_type && (
+                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      ✅ Se adjuntarán automáticamente los PDFs del tipo "{formData.document_type}" de la plantilla seleccionada
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center">

@@ -1,0 +1,51 @@
+{
+  "apps": [
+    {
+      "name": "sadi-nextjs",
+      "script": "npm",
+      "args": "start",
+      "cwd": "./",
+      "instances": 1,
+      "exec_mode": "fork",
+      "watch": false,
+      "max_memory_restart": "512M",
+      "env": {
+        "NODE_ENV": "production",
+        "PORT": 3000
+      },
+      "log_file": "./logs/sadi-combined.log",
+      "out_file": "./logs/sadi-out.log",
+      "error_file": "./logs/sadi-error.log",
+      "log_date_format": "YYYY-MM-DD HH:mm:ss Z",
+      "merge_logs": true,
+      "autorestart": true,
+      "max_restarts": 10,
+      "min_uptime": "30s",
+      "restart_delay": 5000,
+      "kill_timeout": 5000,
+      "listen_timeout": 10000,
+      "health_check_grace_period": 30000,
+      "cron_restart": "0 2 * * *",
+      "scheduler_health_check": {
+        "enabled": true,
+        "url": "http://localhost:3000/api/scheduler/status",
+        "interval": 60000,
+        "timeout": 5000,
+        "max_failures": 3,
+        "restart_on_failure": true
+      }
+    },
+    {
+      "name": "sadi-scheduler-monitor",
+      "script": "./scripts/scheduler-keepalive.sh",
+      "interpreter": "bash",
+      "instances": 1,
+      "exec_mode": "fork",
+      "autorestart": true,
+      "max_restarts": 5,
+      "restart_delay": 10000,
+      "log_file": "./logs/scheduler-monitor.log",
+      "cron_restart": "0 */6 * * *"
+    }
+  ]
+}
