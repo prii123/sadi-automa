@@ -38,9 +38,9 @@ export class AuthService {
       // Crear super admin por defecto
       const hashedPassword = await bcrypt.hash('superadmin123', 10);
       await client.query(`
-        INSERT INTO usuarios (username, password_hash, nombre, email, rol, role_id, activo)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `, ['superadmin', hashedPassword, 'Super Administrador', 'superadmin@sadi.com', 'super_admin', roleId, 1]);
+        INSERT INTO usuarios (username, password_hash, nombre, email, role_id, activo)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `, ['superadmin', hashedPassword, 'Super Administrador', 'superadmin@sadi.com', roleId, 1]);
 
       console.log('Usuario super administrador creado: superadmin/superadmin123');
     } catch (error) {
@@ -54,7 +54,12 @@ export class AuthService {
   static async login(credentials: LoginCredentials): Promise<{ success: boolean; token?: string; user?: AuthUser; error?: string }> {
     const client = await pool.connect();
     try {
-      const result = await client.query('SELECT id, username, password_hash, nombre, email, rol, role_id FROM usuarios WHERE username = $1 AND activo = 1', [credentials.username]);
+      const result = await client.query(`
+        SELECT u.id, u.username, u.password_hash, u.nombre, u.email, u.role_id, r.nombre as rol
+        FROM usuarios u
+        LEFT JOIN roles r ON u.role_id = r.id
+        WHERE u.username = $1 AND u.activo = 1
+      `, [credentials.username]);
 
       if (result.rows.length === 0) {
         return { success: false, error: 'Usuario no encontrado' };
@@ -142,9 +147,9 @@ export class AuthService {
 
       const hashedPassword = await bcrypt.hash(userData.password, 10);
       await client.query(`
-        INSERT INTO usuarios (username, password_hash, nombre, email, rol, role_id, activo, fecha_creacion, fecha_actualizacion)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `, [userData.username, hashedPassword, userData.nombre, userData.email, rol, roleId, 1]);
+        INSERT INTO usuarios (username, password_hash, nombre, email, role_id, activo, fecha_creacion, fecha_actualizacion)
+        VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `, [userData.username, hashedPassword, userData.nombre, userData.email, roleId, 1]);
 
       return { success: true };
     } catch (error) {
