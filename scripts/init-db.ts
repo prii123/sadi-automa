@@ -15,6 +15,7 @@ async function initDatabase() {
         nombre TEXT NOT NULL,
         tipo TEXT NOT NULL,
         estado TEXT NOT NULL DEFAULT 'activo',
+        contador_id INTEGER REFERENCES usuarios(id),
 
         -- Certificado de Facturación Electrónica
         cert_activo INTEGER DEFAULT 0,
@@ -52,6 +53,7 @@ async function initDatabase() {
     // Índices para mejorar el rendimiento
     await client.query('CREATE INDEX IF NOT EXISTS idx_nit ON empresas(nit)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_estado ON empresas(estado)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_contador_id ON empresas(contador_id)');
 
     // Tabla triggers
     await client.query(`

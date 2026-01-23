@@ -26,11 +26,6 @@ export default function ControlNavbar() {
       name: 'Plantillas',
       href: '/control/plantillas',
       icon: '📝'
-    },
-    {
-      name: 'Triggers',
-      href: '/control/triggers',
-      icon: '⚡'
     }
   ];
 

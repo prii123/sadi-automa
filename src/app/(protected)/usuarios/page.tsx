@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Usuario } from '@/models';
+import AccessDenied from '@/components/AccessDenied';
 
 interface Role {
   id: number;
@@ -14,6 +15,7 @@ export default function UsuariosPage() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasAccess, setHasAccess] = useState<boolean | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingUsuario, setEditingUsuario] = useState<Usuario | null>(null);
   const [formData, setFormData] = useState({
@@ -24,11 +26,48 @@ export default function UsuariosPage() {
     role_id: 5 // ID por defecto para 'usuario'
   });
 
-  // Cargar usuarios y roles
+  // Verificar acceso y cargar datos
   useEffect(() => {
-    fetchUsuarios();
-    fetchRoles();
+    checkAccessAndLoad();
   }, []);
+
+  const checkAccessAndLoad = async () => {
+    try {
+      // Verificar autenticación
+      const authResponse = await fetch('/api/auth/me');
+      const authData = await authResponse.json();
+
+      if (!authData.success) {
+        setHasAccess(false);
+        setLoading(false);
+        return;
+      }
+
+      // Verificar permisos para el módulo Usuarios
+      const permissionResponse = await fetch('/api/verificar-permiso', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          moduleName: 'Usuarios',
+          permission: 'ver'
+        })
+      });
+
+      const permissionData = await permissionResponse.json();
+      const accessGranted = permissionData.success && permissionData.hasPermission;
+      setHasAccess(accessGranted);
+
+      // Solo cargar datos si tiene acceso
+      if (accessGranted) {
+        await Promise.all([fetchUsuarios(), fetchRoles()]);
+      }
+    } catch (error) {
+      console.error('Error verificando acceso:', error);
+      setHasAccess(false);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchUsuarios = async () => {
     try {
@@ -123,7 +162,21 @@ export default function UsuariosPage() {
     setShowForm(false);
   };
 
-  if (loading) return <div className="flex items-center justify-center h-full">Cargando...</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!hasAccess) {
+    return <AccessDenied 
+      title="Acceso Denegado" 
+      message="No tienes permisos para acceder al módulo Usuarios" 
+      action="accessible"
+    />;
+  }
 
   return (
     <div className="space-y-6">

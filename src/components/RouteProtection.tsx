@@ -1,30 +1,36 @@
+'use client';
+
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { AuthUser } from '@/services/authService';
-import { RoleModuloService } from '@/services/roleService';
 import { useAccessControl } from '@/hooks/useAccessControl';
 
 interface RouteProtectionProps {
   children: React.ReactNode;
   requiredPermission?: string; // 'ver', 'crear', 'editar', 'eliminar'
   moduleName?: string; // Nombre del módulo (si no se especifica, se infiere de la ruta)
+  allowedRoles?: string[]; // Roles permitidos para acceder
 }
 
+import { ROUTE_MODULE_MAP, getModuleFromPath } from '@/lib/routeModuleMapper';
+
 // Mapeo de rutas a nombres de módulos
-const ROUTE_MODULE_MAP: Record<string, string> = {
-  '/control': 'Control',
-  '/estadisticas': 'Estadísticas',
-  '/empresas': 'Empresas',
-  '/notificaciones': 'Notificaciones',
-  '/plantillas': 'Plantillas',
-  '/triggers': 'Triggers',
-  '/usuarios': 'Usuarios',
-};
+// DEPRECATED: Usar ROUTE_MODULE_MAP de routeModuleMapper.ts
+// const ROUTE_MODULE_MAP: Record<string, string> = {
+//   '/control': 'Control',
+//   '/estadisticas': 'Estadísticas',
+//   '/empresas': 'Empresas',
+//   '/notificaciones': 'Notificaciones',
+//   '/plantillas': 'Plantillas',
+//   '/usuarios': 'Usuarios',
+//   '/contador': 'Contador',
+// };
 
 export default function RouteProtection({
   children,
   requiredPermission = 'ver',
-  moduleName
+  moduleName,
+  allowedRoles
 }: RouteProtectionProps) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [hasAccess, setHasAccess] = useState(false);
@@ -51,13 +57,22 @@ export default function RouteProtection({
       const currentUser = authData.user;
       setUser(currentUser);
 
-      // Permitir acceso directo a /control (dashboard)
-      if (pathname === '/control') {
-        setHasAccess(true);
-        setLoading(false);
-        return;
+      // Si se especifican roles permitidos, verificar primero
+      if (allowedRoles && allowedRoles.length > 0) {
+        const userRole = currentUser.rol?.toLowerCase();
+        const hasAllowedRole = allowedRoles.some(role => role.toLowerCase() === userRole);
+        
+        if (!hasAllowedRole) {
+          redirectToAccessDenied(
+            'Acceso Denegado',
+            `Esta sección es solo para usuarios con rol: ${allowedRoles.join(', ')}`,
+            'accessible'
+          );
+          return;
+        }
       }
 
+   
       // Determinar el módulo basado en la ruta
       const currentModule = moduleName || ROUTE_MODULE_MAP[pathname] || getModuleFromPath(pathname);
 
@@ -67,12 +82,18 @@ export default function RouteProtection({
         return;
       }
 
-      // Verificar permisos usando el servicio
-      const hasPermission = await RoleModuloService.hasPermission(
-        currentUser.role_id,
-        currentModule,
-        requiredPermission
-      );
+      // Verificar permisos usando la API
+      const permissionResponse = await fetch('/api/verificar-permiso', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          moduleName: currentModule,
+          permission: requiredPermission
+        })
+      });
+
+      const permissionData = await permissionResponse.json();
+      const hasPermission = permissionData.success && permissionData.hasPermission;
 
       setHasAccess(hasPermission);
 
@@ -97,18 +118,18 @@ export default function RouteProtection({
   };
 
   // Función auxiliar para extraer módulo de rutas complejas
-  const getModuleFromPath = (path: string): string | null => {
-    const segments = path.split('/').filter(Boolean);
+  // DEPRECATED: Usar getModuleFromPath de routeModuleMapper.ts
+  // const getModuleFromPath = (path: string): string | null => {
+  //   const segments = path.split('/').filter(Boolean);
 
-    // Para rutas como /empresas/[nit], devolver "Empresas"
-    if (segments[0] === 'empresas') return 'Empresas';
-    if (segments[0] === 'notificaciones') return 'Notificaciones';
-    if (segments[0] === 'triggers') return 'Triggers';
-    if (segments[0] === 'usuarios') return 'Usuarios';
-    if (segments[0] === 'roles') return 'Roles';
+  //   // Para rutas como /empresas/[nit], devolver "Empresas"
+  //   if (segments[0] === 'empresas') return 'Empresas';
+  //   if (segments[0] === 'notificaciones') return 'Notificaciones';
+  //   if (segments[0] === 'usuarios') return 'Usuarios';
+  //   if (segments[0] === 'roles') return 'Roles';
 
-    return null;
-  };
+  //   return null;
+  // };
 
   if (loading) {
     return (

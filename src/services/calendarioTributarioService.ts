@@ -522,7 +522,7 @@ export class CalendarioTributarioService {
       throw error;
     }
   }
-  async obtenerTodosCalendarios(year?: number): Promise<any[]> {
+  async obtenerTodosCalendarios(year?: number, empresaIds?: number[]): Promise<any[]> {
     try {
       let sqlQuery = `
         SELECT ct.*,
@@ -539,10 +539,18 @@ export class CalendarioTributarioService {
         WHERE 1=1
       `;
       const params: any[] = [];
+      let paramIndex = 1;
 
       if (year) {
-        sqlQuery += ' AND EXTRACT(YEAR FROM ct.fecha_vencimiento) = $1';
+        sqlQuery += ` AND EXTRACT(YEAR FROM ct.fecha_vencimiento) = $${paramIndex}`;
         params.push(year);
+        paramIndex++;
+      }
+
+      if (empresaIds && empresaIds.length > 0) {
+        const placeholders = empresaIds.map(() => `$${paramIndex++}`).join(',');
+        sqlQuery += ` AND ct.empresa_id IN (${placeholders})`;
+        params.push(...empresaIds);
       }
 
       sqlQuery += ' ORDER BY ct.fecha_vencimiento ASC';

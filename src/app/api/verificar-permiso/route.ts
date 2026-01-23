@@ -15,14 +15,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const { modulo, accion } = await request.json();
-    if (!modulo || !accion) {
-      return NextResponse.json({ error: 'Parámetros requeridos: modulo, accion' }, { status: 400 });
+    const { modulo, accion, moduleName, permission } = await request.json();
+    
+    // Soportar ambos formatos para compatibilidad
+    const moduloNombre = modulo || moduleName;
+    const permiso = accion || permission;
+    
+    if (!moduloNombre || !permiso) {
+      return NextResponse.json({ error: 'Parámetros requeridos: modulo/moduleName, accion/permission' }, { status: 400 });
     }
 
-    const hasPermission = await RoleModuloService.hasPermission(user.role_id, modulo, accion);
+    const hasPermission = await RoleModuloService.hasPermission(user.role_id, moduloNombre, permiso);
 
-    return NextResponse.json({ hasPermission });
+    return NextResponse.json({ 
+      success: true, 
+      hasPermission 
+    });
   } catch (error) {
     console.error('Error verificando permiso:', error);
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AuthService } from '@/services/authService';
 import { RoleModuloService } from '@/services/roleService';
+import { ROUTE_MODULE_MAP, getModuleFromPath } from '@/lib/routeModuleMapper';
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,15 +37,16 @@ export async function GET(request: NextRequest) {
     }
 
     // Mapeo de rutas a nombres de módulos
-    const ROUTE_MODULE_MAP: Record<string, string> = {
-      '/control': 'Control',
-      '/estadisticas': 'Estadísticas',
-      '/empresas': 'Empresas',
-      '/notificaciones': 'Notificaciones',
-      '/plantillas': 'Plantillas',
-      '/triggers': 'Triggers',
-      '/usuarios': 'Usuarios',
-    };
+    // DEPRECATED: Usar ROUTE_MODULE_MAP de routeModuleMapper.ts
+    // const ROUTE_MODULE_MAP: Record<string, string> = {
+    //   '/control': 'Control',
+    //   '/estadisticas': 'Estadísticas',
+    //   '/empresas': 'Empresas',
+    //   '/notificaciones': 'Notificaciones',
+    //   '/plantillas': 'Plantillas',
+    //   '/usuarios': 'Usuarios',
+    //   '/contador': 'Contador',
+    // };
 
     // Determinar el módulo basado en la ruta
     const currentModule = ROUTE_MODULE_MAP[pathname] || getModuleFromPath(pathname);
@@ -80,14 +82,15 @@ export async function GET(request: NextRequest) {
 }
 
 // Función auxiliar para extraer módulo de rutas complejas
-function getModuleFromPath(path: string): string | null {
-  const segments = path.split('/').filter(Boolean);
+// DEPRECATED: Usar getModuleFromPath de routeModuleMapper.ts
+// function getModuleFromPath(path: string): string | null {
+//   const segments = path.split('/').filter(Boolean);
 
-  if (segments[0] === 'empresas') return 'Empresas';
-  if (segments[0] === 'notificaciones') return 'Notificaciones';
-  if (segments[0] === 'triggers') return 'Triggers';
-  if (segments[0] === 'usuarios') return 'Usuarios';
-  if (segments[0] === 'roles') return 'Roles';
+//   if (segments[0] === 'empresas') return 'Empresas';
+//   if (segments[0] === 'notificaciones') return 'Notificaciones';
+//   if (segments[0] === 'triggers') return 'Triggers';
+//   if (segments[0] === 'usuarios') return 'Usuarios';
+//   if (segments[0] === 'roles') return 'Roles';
 
-  return null;
-}
+//   return null;
+// }

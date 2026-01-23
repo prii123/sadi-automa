@@ -1,17 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { initializeScheduler } from '../lib/scheduler-init';
-
-// Variable para controlar si el scheduler ya se inicializó
-let schedulerInitialized = false;
 
 export function middleware(request: NextRequest) {
-  // Inicializar el scheduler solo una vez
-  if (!schedulerInitialized) {
-    initializeScheduler();
-    schedulerInitialized = true;
-  }
-
   return NextResponse.next();
 }
 

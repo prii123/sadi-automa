@@ -5,13 +5,20 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const year = searchParams.get('year');
+    const empresasParam = searchParams.get('empresas');
+
+    let empresaIds: number[] | undefined;
+    if (empresasParam) {
+      empresaIds = empresasParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+    }
 
     const service = new CalendarioTributarioService();
     await service.connect();
 
     try {
       const calendario = await service.obtenerTodosCalendarios(
-        year ? parseInt(year) : undefined
+        year ? parseInt(year) : undefined,
+        empresaIds
       );
 
       return NextResponse.json({

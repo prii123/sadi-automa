@@ -1,17 +1,73 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import SchedulerMonitor from '@/components/SchedulerMonitor';
+import AccessDenied from '@/components/AccessDenied';
 
 export default function ControlDashboard() {
+  const [hasAccess, setHasAccess] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    checkAccess();
+  }, []);
+
+  const checkAccess = async () => {
+    try {
+      // Verificar autenticación
+      const authResponse = await fetch('/api/auth/me');
+      const authData = await authResponse.json();
+
+      if (!authData.success) {
+        setHasAccess(false);
+        setLoading(false);
+        return;
+      }
+
+      // Verificar permisos para el módulo Control
+      const permissionResponse = await fetch('/api/verificar-permiso', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          moduleName: 'Control',
+          permission: 'ver'
+        })
+      });
+
+      const permissionData = await permissionResponse.json();
+      setHasAccess(permissionData.success && permissionData.hasPermission);
+    } catch (error) {
+      console.error('Error verificando acceso:', error);
+      setHasAccess(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!hasAccess) {
+    return <AccessDenied 
+      title="Acceso Denegado" 
+      message="No tienes permisos para acceder al módulo Control" 
+      action="accessible"
+    />;
+  }
+
   const stats = [
     {
-      title: 'Triggers Activos',
-      value: '2',
-      icon: '⚡',
-      color: 'text-green-600',
-      bgColor: 'bg-green-50',
-      borderColor: 'border-green-200'
+      title: 'Empresas Activas',
+      value: '25',
+      icon: '🏢',
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-50',
+      borderColor: 'border-blue-200'
     },
     {
       title: 'Notificaciones Pendientes',
@@ -55,18 +111,18 @@ export default function ControlDashboard() {
       color: 'bg-yellow-600 hover:bg-yellow-700'
     },
     {
-      name: 'Configurar Triggers',
-      href: '/control/triggers',
-      description: 'Automatizar procesos',
-      icon: '⚡',
-      color: 'bg-purple-600 hover:bg-purple-700'
-    },
-    {
       name: 'Administrar Plantillas',
       href: '/control/plantillas',
       description: 'Gestionar documentos',
       icon: '📝',
       color: 'bg-green-600 hover:bg-green-700'
+    },
+    {
+      name: 'Gestión de Empresas',
+      href: '/empresas',
+      description: 'Administrar empresas del sistema',
+      icon: '🏢',
+      color: 'bg-purple-600 hover:bg-purple-700'
     }
   ];
 
@@ -120,9 +176,6 @@ export default function ControlDashboard() {
           ))}
         </div>
       </div>
-
-      {/* Scheduler Monitor */}
-      <SchedulerMonitor />
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
         <h2 className="text-2xl font-semibold text-blue-900 mb-4">Información del Sistema</h2>

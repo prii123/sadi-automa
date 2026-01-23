@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Empresa } from '@/models';
+import PermissionGuard from '@/components/PermissionGuard';
 
 export default function EmpresasPage() {
   const router = useRouter();
@@ -18,7 +19,7 @@ export default function EmpresasPage() {
     estado: 'activo'
   });
 
-  // Cargar empresas
+  // Cargar empresas al montar el componente
   useEffect(() => {
     fetchEmpresas();
   }, []);
@@ -131,19 +132,26 @@ export default function EmpresasPage() {
     );
   });
 
-  if (loading) return <div className="flex items-center justify-center h-full">Cargando...</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Gestión de Empresas</h1>
-        <button
-          onClick={() => setShowForm(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
-        >
-          Nueva Empresa
-        </button>
-      </div>
+    <PermissionGuard moduleName="Empresas" permission="ver">
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold text-gray-900">Gestión de Empresas</h1>
+          <button
+            onClick={() => setShowForm(true)}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+          >
+            Nueva Empresa
+          </button>
+        </div>
 
       {/* Campo de búsqueda */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
@@ -332,6 +340,7 @@ export default function EmpresasPage() {
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </PermissionGuard>
   );
 }

@@ -2,7 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { PlantillaConUsuario } from '@/models';
+import { PlantillaConUsuario, PlantillaVariable } from '@/models';
+
+interface VariableFormData {
+  nombre: string;
+  descripcion: string;
+  tipo_variable: 'texto' | 'numero' | 'fecha' | 'email' | 'moneda' | 'telefono' | 'direccion';
+  valor_defecto: string;
+  es_requerida: boolean;
+}
 
 export default function PlantillasPage() {
   const router = useRouter();
@@ -12,12 +20,21 @@ export default function PlantillasPage() {
   const [editingPlantilla, setEditingPlantilla] = useState<PlantillaConUsuario | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [tipoFilter, setTipoFilter] = useState<string>('todos');
+  const [variables, setVariables] = useState<PlantillaVariable[]>([]);
+  const [showVariableForm, setShowVariableForm] = useState(false);
+  const [editingVariable, setEditingVariable] = useState<PlantillaVariable | null>(null);
+  const [variableFormData, setVariableFormData] = useState<VariableFormData>({
+    nombre: '',
+    descripcion: '',
+    tipo_variable: 'texto',
+    valor_defecto: '',
+    es_requerida: false
+  });
   const [formData, setFormData] = useState({
     nombre: '',
     descripcion: '',
     tipo: 'informe' as 'informe' | 'documento' | 'certificado' | 'notificacion' | 'otro',
     contenido: '',
-    variables: [] as string[],
     formato_salida: 'pdf' as 'pdf' | 'docx' | 'html',
     usa_datos_empresa: true,
     usa_datos_usuario: false,
@@ -59,6 +76,12 @@ export default function PlantillasPage() {
 
       const data = await response.json();
       if (data.success) {
+        // Si hay variables, guardarlas
+        if (variables.length > 0) {
+          const plantillaId = editingPlantilla ? editingPlantilla.id : data.data.id;
+          await saveVariables(plantillaId);
+        }
+        
         fetchPlantillas();
         setShowForm(false);
         setEditingPlantilla(null);
@@ -72,19 +95,24 @@ export default function PlantillasPage() {
     }
   };
 
-  const handleEdit = (plantilla: PlantillaConUsuario) => {
+  const handleEdit = async (plantilla: PlantillaConUsuario) => {
     setEditingPlantilla(plantilla);
     setFormData({
       nombre: plantilla.nombre,
       descripcion: plantilla.descripcion || '',
       tipo: plantilla.tipo,
       contenido: plantilla.contenido,
-      variables: plantilla.variables || [],
       formato_salida: (plantilla as any).formato_salida || 'pdf',
       usa_datos_empresa: (plantilla as any).usa_datos_empresa ?? true,
       usa_datos_usuario: (plantilla as any).usa_datos_usuario ?? false,
       activo: plantilla.activo
     });
+    
+    // Cargar variables de la plantilla
+    if (plantilla.id) {
+      await loadPlantillaVariables(plantilla.id);
+    }
+    
     setShowForm(true);
   };
 
@@ -120,12 +148,156 @@ export default function PlantillasPage() {
       descripcion: '',
       tipo: 'informe' as 'informe' | 'documento' | 'certificado' | 'notificacion' | 'otro',
       contenido: '',
-      variables: [],
       formato_salida: 'pdf' as 'pdf' | 'docx' | 'html',
       usa_datos_empresa: true,
       usa_datos_usuario: false,
       activo: true
     });
+    setVariables([]);
+    resetVariableForm();
+  };
+
+  const resetVariableForm = () => {
+    setVariableFormData({
+      nombre: '',
+      descripcion: '',
+      tipo_variable: 'texto',
+      valor_defecto: '',
+      es_requerida: false
+    });
+  };
+
+  const loadPlantillaVariables = async (plantillaId: number) => {
+    try {
+      const response = await fetch(`/api/plantillas/${plantillaId}/variables`);
+      const data = await response.json();
+      if (data.success) {
+        setVariables(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error cargando variables:', error);
+    }
+  };
+
+  const saveVariables = async (plantillaId: number) => {
+    try {
+      // Primero sincronizar variables desde el contenido
+      await fetch(`/api/plantillas/${plantillaId}/variables`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync' })
+      });
+
+      // Luego crear/actualizar las variables definidas manualmente
+      for (const variable of variables) {
+        if (variable.id) {
+          // Actualizar variable existente
+          await fetch(`/api/plantillas/${plantillaId}/variables`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: variable.id, ...variable })
+          });
+        } else {
+          // Crear nueva variable
+          await fetch(`/api/plantillas/${plantillaId}/variables`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              action: 'create',
+              variable: { ...variable, plantilla_id: plantillaId }
+            })
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error guardando variables:', error);
+    }
+  };
+
+  const handleAddVariable = () => {
+    if (!variableFormData.nombre.trim()) {
+      alert('El nombre de la variable es requerido');
+      return;
+    }
+
+    const newVariable: PlantillaVariable = {
+      ...variableFormData,
+      plantilla_id: 0, // Se asignará al guardar
+      orden_display: variables.length + 1
+    };
+
+    if (editingVariable) {
+      // Editar variable existente
+      const updatedVariables = variables.map(v => 
+        v === editingVariable ? { ...newVariable, id: editingVariable.id } : v
+      );
+      setVariables(updatedVariables);
+      setEditingVariable(null);
+    } else {
+      // Agregar nueva variable
+      setVariables([...variables, newVariable]);
+    }
+
+    resetVariableForm();
+    setShowVariableForm(false);
+  };
+
+  const handleEditVariable = (variable: PlantillaVariable) => {
+    setEditingVariable(variable);
+    setVariableFormData({
+      nombre: variable.nombre,
+      descripcion: variable.descripcion || '',
+      tipo_variable: variable.tipo_variable,
+      valor_defecto: variable.valor_defecto || '',
+      es_requerida: variable.es_requerida
+    });
+    setShowVariableForm(true);
+  };
+
+  const handleDeleteVariable = (variable: PlantillaVariable) => {
+    if (confirm(`¿Estás seguro de eliminar la variable "${variable.nombre}"?`)) {
+      setVariables(variables.filter(v => v !== variable));
+    }
+  };
+
+  const detectVariablesFromContent = () => {
+    if (!formData.contenido) {
+      alert('Primero ingresa el contenido de la plantilla');
+      return;
+    }
+
+    const variableRegex = /\{([^}]+)\}|\{\{([^}]+)\}\}|\[([^\]]+)\]/g;
+    const detectedVars = new Set<string>();
+    let match;
+
+    while ((match = variableRegex.exec(formData.contenido)) !== null) {
+      const variable = (match[1] || match[2] || match[3])?.trim().toLowerCase();
+      if (variable) {
+        detectedVars.add(variable);
+      }
+    }
+
+    // Agregar variables detectadas que no existan ya
+    const existingNames = variables.map(v => v.nombre.toLowerCase());
+    const newVariables = Array.from(detectedVars)
+      .filter(name => !existingNames.includes(name))
+      .map((name, index) => ({
+        nombre: name,
+        descripcion: `Variable detectada automáticamente: ${name}`,
+        tipo_variable: 'texto' as const,
+        valor_defecto: `[${name}]`,
+        es_requerida: false,
+        plantilla_id: 0,
+        orden_display: variables.length + index + 1
+      }));
+
+    setVariables([...variables, ...newVariables]);
+    
+    if (newVariables.length > 0) {
+      alert(`Se detectaron ${newVariables.length} nuevas variables en el contenido`);
+    } else {
+      alert('No se detectaron nuevas variables en el contenido');
+    }
   };
 
   const filteredPlantillas = plantillas.filter(plantilla => {
@@ -165,7 +337,7 @@ export default function PlantillasPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Plantillas Personalizables</h1>
-          <p className="text-gray-600 mt-2">Crea plantillas que se pueden generar automáticamente y adjuntar en los triggers</p>
+          <p className="text-gray-600 mt-2">Crea y administra plantillas personalizables para documentos y comunicaciones</p>
         </div>
         <button
           onClick={() => setShowForm(true)}
@@ -338,17 +510,67 @@ export default function PlantillasPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">Variables Disponibles</label>
-                <textarea
-                  value={formData.variables.join('\n')}
-                  onChange={(e) => setFormData({ ...formData, variables: e.target.value.split('\n').filter(v => v.trim()) })}
-                  rows={4}
-                  placeholder="nombre_empresa\nfecha_actual\nnit_empresa\nnombre_usuario\nemail_empresa"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm text-gray-900"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Una variable por línea. Estas serán reemplazadas automáticamente al generar el documento.
-                </p>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="block text-sm font-medium text-gray-700">Variables de la Plantilla</label>
+                  <div className="flex space-x-2">
+                    <button
+                      type="button"
+                      onClick={detectVariablesFromContent}
+                      className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-md hover:bg-yellow-200"
+                    >
+                      🔍 Detectar del contenido
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowVariableForm(true)}
+                      className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-md hover:bg-blue-200"
+                    >
+                      + Agregar Variable
+                    </button>
+                  </div>
+                </div>
+                
+                {variables.length > 0 ? (
+                  <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-md p-3">
+                    {variables.map((variable, index) => (
+                      <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded text-sm">
+                        <div className="flex-1">
+                          <span className="font-medium text-gray-900">{variable.nombre}</span>
+                          <span className="ml-2 text-xs px-1 py-0.5 bg-gray-200 rounded">
+                            {variable.tipo_variable}
+                          </span>
+                          {variable.es_requerida && (
+                            <span className="ml-1 text-xs text-red-600">*</span>
+                          )}
+                          {variable.descripcion && (
+                            <p className="text-xs text-gray-600 mt-1">{variable.descripcion}</p>
+                          )}
+                        </div>
+                        <div className="flex space-x-1">
+                          <button
+                            type="button"
+                            onClick={() => handleEditVariable(variable)}
+                            className="text-blue-600 hover:text-blue-800 text-xs"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteVariable(variable)}
+                            className="text-red-600 hover:text-red-800 text-xs"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 border border-gray-200 rounded-md bg-gray-50">
+                    <p className="text-gray-500 text-sm">No hay variables definidas</p>
+                    <p className="text-gray-400 text-xs mt-1">Usa "Detectar del contenido" o "Agregar Variable"</p>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -411,6 +633,104 @@ export default function PlantillasPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Variable */}
+      {showVariableForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md">
+            <h3 className="text-lg font-bold mb-4">
+              {editingVariable ? 'Editar Variable' : 'Nueva Variable'}
+            </h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
+                <input
+                  type="text"
+                  required
+                  value={variableFormData.nombre}
+                  onChange={(e) => setVariableFormData({ ...variableFormData, nombre: e.target.value })}
+                  placeholder="ej: nombre_empresa"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+                <input
+                  type="text"
+                  value={variableFormData.descripcion}
+                  onChange={(e) => setVariableFormData({ ...variableFormData, descripcion: e.target.value })}
+                  placeholder="ej: Nombre o razón social de la empresa"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Variable</label>
+                <select
+                  value={variableFormData.tipo_variable}
+                  onChange={(e) => setVariableFormData({ ...variableFormData, tipo_variable: e.target.value as any })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                >
+                  <option value="texto">Texto</option>
+                  <option value="numero">Número</option>
+                  <option value="fecha">Fecha</option>
+                  <option value="email">Email</option>
+                  <option value="moneda">Moneda</option>
+                  <option value="telefono">Teléfono</option>
+                  <option value="direccion">Dirección</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Valor por Defecto</label>
+                <input
+                  type="text"
+                  value={variableFormData.valor_defecto}
+                  onChange={(e) => setVariableFormData({ ...variableFormData, valor_defecto: e.target.value })}
+                  placeholder="ej: [Sin especificar]"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                />
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="es_requerida"
+                  checked={variableFormData.es_requerida}
+                  onChange={(e) => setVariableFormData({ ...variableFormData, es_requerida: e.target.checked })}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="es_requerida" className="ml-2 block text-sm text-gray-900">
+                  Variable requerida
+                </label>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 pt-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowVariableForm(false);
+                  setEditingVariable(null);
+                  resetVariableForm();
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleAddVariable}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+              >
+                {editingVariable ? 'Actualizar' : 'Agregar'}
+              </button>
+            </div>
           </div>
         </div>
       )}

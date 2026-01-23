@@ -20,10 +20,10 @@ export async function GET(request: NextRequest) {
     // Obtener módulos accesibles
     const modulos = await RoleModuloService.getModulosByRoleId(roleId);
 
-    // Formatear para el frontend
+    // Formatear para el frontend con rutas mapeadas
     const menuItems = modulos.map(modulo => ({
       name: modulo.nombre,
-      href: modulo.ruta,
+      href: getRouteForModulo(modulo.nombre),
       icon: getIconForModulo(modulo.nombre),
       modulo: modulo.nombre,
       accion: 'ver' // Para mostrar en menú, solo necesitamos 'ver'
@@ -36,17 +36,12 @@ export async function GET(request: NextRequest) {
   }
 }
 
+import { getRouteForModule, getIconForModule } from '@/lib/routeModuleMapper';
+
+function getRouteForModulo(nombre: string): string {
+  return getRouteForModule(nombre);
+}
+
 function getIconForModulo(nombre: string): string {
-  const icons: { [key: string]: string } = {
-    'Control': '🎛️',
-    'Estadísticas': '📊',
-    'Empresas': '🏢',
-    'Notificaciones': '🔔',
-    'Triggers': '⚡',
-    'Usuarios': '👥',
-    'Calendario Tributario': '📅',
-    'Impuestos': '💰',
-    'Plantillas': '📝'
-  };
-  return icons[nombre] || '📄';
+  return getIconForModule(nombre);
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { getIconForModule } from '@/lib/routeModuleMapper';
 
 interface MenuItem {
   name: string;
@@ -23,6 +24,8 @@ interface SidebarProps {
 
 export default function Sidebar({ user, onLogout }: SidebarProps) {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [hasControlAccess, setHasControlAccess] = useState(false);
+  const [hasContadorAccess, setHasContadorAccess] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const pathname = usePathname();
@@ -46,7 +49,7 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
     try {
       setLoading(true);
 
-      // Obtener módulos accesibles desde la API
+      // Obtener módulos accesibles desde la API (ya filtrados por permisos)
       const response = await fetch('/api/modulos');
       if (!response.ok) {
         throw new Error('Error al obtener módulos');
@@ -54,7 +57,14 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
 
       const menuItemsData = await response.json();
 
-      // Filtrar para excluir módulos movidos a control y otros
+      // Determinar acceso basado en los módulos que devuelve la API
+      const hasControl = menuItemsData.some((item: MenuItem) => item.name === 'Control');
+      const hasContador = menuItemsData.some((item: MenuItem) => item.name === 'Contador');
+      
+      setHasControlAccess(hasControl);
+      setHasContadorAccess(hasContador);
+
+      // Filtrar módulos que se manejan por separado en el sidebar
       const filteredMenuItems = menuItemsData.filter((item: MenuItem) => 
         item.name !== 'Calendario Tributario' && 
         item.name !== 'Roles' && 
@@ -62,32 +72,24 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
         item.name !== 'Estadísticas' &&
         item.name !== 'Notificaciones' &&
         item.name !== 'Plantillas' &&
-        item.name !== 'Triggers' &&
-        item.name !== 'Control'
+        item.name !== 'Control' &&
+        item.name !== 'Contador'
       );
 
       setMenuItems(filteredMenuItems);
     } catch (error) {
       console.error('Error cargando menú dinámico:', error);
-      // Fallback: menú vacío
+      // Fallback: sin acceso a nada
       setMenuItems([]);
+      setHasControlAccess(false);
+      setHasContadorAccess(false);
     } finally {
       setLoading(false);
     }
   };
 
   const getIconForModulo = (moduloNombre: string): string => {
-    const icons: { [key: string]: string } = {
-      'Control': '🎛️',
-      'Dashboard': '📊',
-      'Estadísticas': '📊',
-      'Empresas': '🏢',
-      'Notificaciones': '🔔',
-      'Plantillas': '📝',
-      'Triggers': '⚡',
-      'Usuarios': '👥'
-    };
-    return icons[moduloNombre] || '📄';
+    return getIconForModule(moduloNombre);
   };
 
   const handleLogout = async () => {
@@ -169,21 +171,41 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
               Home
             </Link>
 
-            {/* Control - siempre visible */}
-            <Link
-              href="/control"
-              className={`
-                flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors
-                ${pathname.startsWith('/control')
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                }
-              `}
-              onClick={() => setIsOpen(false)}
-            >
-              <span className="mr-3">🎛️</span>
-              Control
-            </Link>
+            {/* Control - solo visible si tiene permisos */}
+            {hasControlAccess && (
+              <Link
+                href="/control"
+                className={`
+                  flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors
+                  ${pathname.startsWith('/control')
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                  }
+                `}
+                onClick={() => setIsOpen(false)}
+              >
+                <span className="mr-3">🎛️</span>
+                Control
+              </Link>
+            )}
+
+            {/* Calendario Tributario del Contador - solo visible si tiene permisos al módulo Contador */}
+            {hasContadorAccess && (
+              <Link
+                href="/contador"
+                className={`
+                  flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors
+                  ${pathname.startsWith('/contador/calendario-tributario')
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                  }
+                `}
+                onClick={() => setIsOpen(false)}
+              >
+                <span className="mr-3">📅</span>
+                Mi Calendario
+              </Link>
+            )}
 
             {menuItems.map((item) => {
               const isActive = pathname === item.href;

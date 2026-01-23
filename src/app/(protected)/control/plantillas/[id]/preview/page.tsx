@@ -2,9 +2,9 @@
 
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { PlantillaConUsuario } from '@/models';
+import { PlantillaConUsuario, PlantillaVariable } from '@/models';
 
-interface PreviewData {
+interface VariableValor {
   [key: string]: string;
 }
 
@@ -13,87 +13,174 @@ export default function PlantillaPreviewPage({ params }: { params: Promise<{ id:
   const resolvedParams = use(params);
   const [plantilla, setPlantilla] = useState<PlantillaConUsuario | null>(null);
   const [loading, setLoading] = useState(true);
-  const [previewData, setPreviewData] = useState<PreviewData>({});
+  const [variables, setVariables] = useState<PlantillaVariable[]>([]);
+  const [variableValores, setVariableValores] = useState<VariableValor>({});
   const [renderedContent, setRenderedContent] = useState('');
   const [activeTab, setActiveTab] = useState<'preview' | 'variables'>('preview');
   const [searchTerm, setSearchTerm] = useState('');
   const [empresas, setEmpresas] = useState<any[]>([]);
   const [searchingEmpresas, setSearchingEmpresas] = useState(false);
   const [showEmpresaResults, setShowEmpresaResults] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [selectedEmpresaId, setSelectedEmpresaId] = useState<number | null>(null);
+  const [selectedEmpresa, setSelectedEmpresa] = useState<any>(null);
+  const [loadingData, setLoadingData] = useState(false);
 
   useEffect(() => {
-    fetchPlantilla();
+    loadPlantillaAndVariables();
   }, [resolvedParams.id]);
 
-  const fetchPlantilla = async () => {
+  const loadPlantillaAndVariables = async () => {
     try {
-      const response = await fetch(`/api/plantillas/${resolvedParams.id}`);
-      const data = await response.json();
-      if (data.success) {
-        setPlantilla(data.data);
-        initializePreviewData(data.data);
+      console.log('=== Cargando plantilla y variables ===');
+      setLoading(true);
+      
+      // Cargar plantilla
+      const plantillaResponse = await fetch(`/api/plantillas/${resolvedParams.id}`);
+      const plantillaData = await plantillaResponse.json();
+      
+      if (!plantillaData.success) {
+        console.error('Error cargando plantilla:', plantillaData.error);
+        return;
       }
+      
+      setPlantilla(plantillaData.data);
+      console.log('Plantilla cargada:', plantillaData.data.nombre);
+      
+      // Cargar variables de la plantilla
+      await loadVariables();
+      
     } catch (error) {
-      console.error('Error cargando plantilla:', error);
+      console.error('Error cargando plantilla y variables:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const initializePreviewData = (plantilla: PlantillaConUsuario) => {
-    const defaultData: PreviewData = {
-      // Datos de ejemplo para la vista previa
-      nombre_empresa: 'ACME Corporación S.A.S.',
-      nit_empresa: '900.123.456-7',
-      email_empresa: 'contacto@acme.com',
-      telefono_empresa: '+57 1 234 5678',
-      direccion_empresa: 'Calle 123 #45-67, Bogotá',
-      nombre_usuario: 'Juan Carlos Pérez',
-      email_usuario: 'juan.perez@acme.com',
-      cargo_usuario: 'Contador Principal',
-      fecha_actual: new Date().toLocaleDateString('es-ES', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      }),
-      fecha_vencimiento: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('es-ES'),
-      hora_actual: new Date().toLocaleTimeString('es-ES'),
-      numero_documento: 'DOC-2026-001',
-      periodo_fiscal: '2026',
-      valor_impuesto: '$1.250.000',
-      codigo_verificacion: 'VER123456'
-    };
-
-    // Agregar variables personalizadas de la plantilla
-    if (plantilla.variables) {
-      plantilla.variables.forEach(variable => {
-        if (!defaultData[variable]) {
-          defaultData[variable] = `[${variable}]`;
+  const loadVariables = async (empresaId?: number) => {
+    try {
+      console.log('=== Cargando variables ===', { empresaId });
+      
+      let url = `/api/plantillas/${resolvedParams.id}/variables`;
+      if (empresaId) {
+        url += `?empresa_id=${empresaId}`;
+      }
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (data.success) {
+        if (empresaId) {
+          // Si es para una empresa específica, son los valores
+          console.log('Valores cargados:', data.data);
+          setVariableValores(data.data || {});
+        } else {
+          // Son las definiciones de variables
+          console.log('Variables cargadas:', data.data);
+          setVariables(data.data || []);
+          
+          // Inicializar valores con valores por defecto
+          const valoresDefault: VariableValor = {};
+          (data.data || []).forEach((variable: PlantillaVariable) => {
+            valoresDefault[variable.nombre] = variable.valor_defecto || '';
+          });
+          setVariableValores(valoresDefault);
         }
-      });
+      }
+    } catch (error) {
+      console.error('Error cargando variables:', error);
     }
-
-    setPreviewData(defaultData);
   };
 
-  const renderPreview = () => {
-    if (!plantilla) return '';
+  const syncVariables = async () => {
+    try {
+      const response = await fetch(`/api/plantillas/${resolvedParams.id}/variables`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync' })
+      });
+      
+      if (response.ok) {
+        // Recargar variables
+        loadPlantillaAndVariables();
+      }
+    } catch (error) {
+      console.error('Error sincronizando variables:', error);
+    }
+  };
 
-    let content = plantilla.contenido;
+  const renderPreview = (plantillaContent: string, valores: VariableValor) => {
+    if (!plantillaContent) {
+      console.log('No hay contenido de plantilla para renderizar');
+      return '';
+    }
 
-    // Reemplazar variables con datos de ejemplo
-    Object.entries(previewData).forEach(([key, value]) => {
-      const regex = new RegExp(`{${key}}`, 'g');
-      content = content.replace(regex, value);
+    if (!valores || Object.keys(valores).length === 0) {
+      console.log('No hay valores para renderizar');
+      return plantillaContent;
+    }
+
+    let content = plantillaContent;
+    console.log('Iniciando renderizado con', Object.keys(valores).length, 'variables');
+
+    // Reemplazar variables con valores 
+    // Soportar múltiples formatos: {variable}, {{variable}}, [variable]
+    Object.entries(valores).forEach(([key, value]) => {
+      const formats = [
+        `{${key}}`,           // {variable}
+        `{{${key}}}`,         // {{variable}}  
+        `[${key}]`,           // [variable]
+        `{${key.toUpperCase()}}`,  // {VARIABLE}
+        `{{${key.toUpperCase()}}}`, // {{VARIABLE}}
+        `[${key.toUpperCase()}]`   // [VARIABLE]
+      ];
+      
+      let replacements = 0;
+      formats.forEach(format => {
+        const regex = new RegExp(format.replace(/[{}\[\]]/g, '\\$&'), 'g');
+        const matches = content.match(regex);
+        if (matches) {
+          console.log(`Reemplazando ${matches.length} ocurrencias de "${format}" con "${value}"`);
+          content = content.replace(regex, value);
+          replacements += matches.length;
+        }
+      });
+      
+      if (replacements > 0) {
+        console.log(`Total de reemplazos para ${key}: ${replacements}`);
+      }
     });
 
+    console.log('Renderizado completado. Longitud original:', plantillaContent.length, 'Nueva longitud:', content.length);
     return content;
   };
 
+  // Effect principal para renderizar cuando cambien los datos
   useEffect(() => {
-    setRenderedContent(renderPreview());
-  }, [plantilla, previewData]);
+    console.log('=== useEffect principal ejecutándose ===');
+    console.log('Plantilla existe:', !!plantilla);
+    console.log('Variable valores keys:', Object.keys(variableValores));
+    
+    if (plantilla && plantilla.contenido && Object.keys(variableValores).length > 0) {
+      console.log('Renderizando contenido...');
+      const newContent = renderPreview(plantilla.contenido, variableValores);
+      console.log('Contenido original (primeros 200 chars):', plantilla.contenido.substring(0, 200));
+      console.log('Contenido renderizado (primeros 200 chars):', newContent.substring(0, 200));
+      setRenderedContent(newContent);
+    } else {
+      console.log('No se puede renderizar - faltan datos');
+    }
+  }, [plantilla?.contenido, JSON.stringify(variableValores)]); // Usar JSON.stringify para detectar cambios profundos
+  
+  // Effect adicional para debugging cuando cambien específicamente los variableValores
+  useEffect(() => {
+    console.log('VariableValores cambió:', variableValores);
+    if (plantilla?.contenido) {
+      console.log('Forzando re-renderizado por cambio en variableValores...');
+      const newContent = renderPreview(plantilla.contenido, variableValores);
+      setRenderedContent(newContent);
+    }
+  }, [variableValores]);
 
   // Cerrar resultados al hacer clic fuera
   useEffect(() => {
@@ -104,11 +191,44 @@ export default function PlantillaPreviewPage({ params }: { params: Promise<{ id:
     }
   }, [showEmpresaResults]);
 
-  const handleVariableChange = (variable: string, value: string) => {
-    setPreviewData(prev => ({
-      ...prev,
-      [variable]: value
-    }));
+  const handleVariableChange = async (nombre: string, valor: string) => {
+    console.log('=== handleVariableChange ejecutándose ===');
+    console.log('Cambiando variable:', nombre, 'a valor:', valor);
+    console.log('Empresa seleccionada ID:', selectedEmpresaId);
+    
+    try {
+      if (selectedEmpresaId) {
+        // Guardar valor específico para la empresa
+        const response = await fetch(`/api/plantillas/${resolvedParams.id}/variables`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'save_values',
+            empresa_id: selectedEmpresaId,
+            valores: { [nombre]: valor }
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error('Error al guardar valor de variable');
+        }
+      }
+      
+      // Actualizar estado local inmediatamente para responsividad
+      const newVariableValores = { ...variableValores, [nombre]: valor };
+      console.log('Actualizando variableValores localmente:', newVariableValores);
+      setVariableValores(newVariableValores);
+      
+      // Forzar re-renderizado inmediatamente 
+      if (plantilla?.contenido) {
+        console.log('Forzando re-renderizado inmediato...');
+        const newContent = renderPreview(plantilla.contenido, newVariableValores);
+        setRenderedContent(newContent);
+      }
+      
+    } catch (error) {
+      console.error('Error en handleVariableChange:', error);
+    }
   };
 
   const downloadPreview = async (format: 'pdf' | 'docx' | 'html') => {
@@ -120,7 +240,7 @@ export default function PlantillaPreviewPage({ params }: { params: Promise<{ id:
         },
         body: JSON.stringify({
           format,
-          data: previewData
+          data: variableValores
         }),
       });
 
@@ -185,24 +305,42 @@ export default function PlantillaPreviewPage({ params }: { params: Promise<{ id:
   };
 
   // Cargar datos de la empresa seleccionada
-  const loadEmpresaData = (empresa: any) => {
-    const updatedData = { ...previewData };
-    
-    // Mapear datos de la empresa a variables
-    updatedData['nombre_empresa'] = empresa.nombre || empresa.razon_social || '';
-    updatedData['nit_empresa'] = empresa.nit || '';
-    updatedData['email_empresa'] = empresa.email || empresa.correo || '';
-    updatedData['telefono_empresa'] = empresa.telefono || '';
-    updatedData['direccion_empresa'] = empresa.direccion || '';
-    
-    // Mantener datos que no son de empresa
-    updatedData['nombre_usuario'] = previewData['nombre_usuario'] || 'Usuario Sistema';
-    updatedData['email_usuario'] = previewData['email_usuario'] || 'usuario@sistema.com';
-    updatedData['cargo_usuario'] = previewData['cargo_usuario'] || 'Administrador';
-    
-    setPreviewData(updatedData);
+  const loadEmpresaData = async (empresa: any) => {
+    console.log('=== loadEmpresaData ejecutándose ===');
+    console.log('Cargando datos para empresa:', empresa.id);
+    setLoadingData(true);
+    setSelectedEmpresaId(empresa.id);
+    setSelectedEmpresa(empresa);
     setSearchTerm(empresa.nombre || empresa.razon_social || '');
     setShowEmpresaResults(false);
+    
+    try {
+      // Cargar valores de variables para esta empresa
+      const variablesResponse = await fetch(`/api/plantillas/${resolvedParams.id}/variables?empresa_id=${empresa.id}`);
+      if (variablesResponse.ok) {
+        const variablesData = await variablesResponse.json();
+        console.log('Variables cargadas desde API:', variablesData);
+        
+        if (variablesData.success && variablesData.variables) {
+          // Convertir array de variables a objeto de valores
+          const nuevosValores: VariableValor = {};
+          
+          variablesData.variables.forEach((variable: any) => {
+            // Usar valor específico de la empresa o valor por defecto
+            nuevosValores[variable.nombre] = variable.valor_especifico || variable.valor_defecto || '';
+          });
+          
+          console.log('Valores de variables procesados:', nuevosValores);
+          setVariables(variablesData.variables);
+          setVariableValores(nuevosValores);
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error cargando datos de empresa:', error);
+    } finally {
+      setLoadingData(false);
+    }
   };
 
   // Handle search input change
@@ -248,6 +386,23 @@ export default function PlantillaPreviewPage({ params }: { params: Promise<{ id:
           <p className="text-gray-700 mt-1 font-medium">{plantilla.descripcion}</p>
         </div>
         <div className="flex space-x-2">
+          <button
+            onClick={() => {
+              console.log('Forzando actualización...', {
+                plantilla: plantilla?.contenido.substring(0, 100),
+                variableValores: variableValores
+              });
+              if (plantilla) {
+                const newContent = renderPreview(plantilla.contenido, variableValores);
+                console.log('Contenido forzado:', newContent.substring(0, 200));
+                setRenderedContent(newContent);
+              }
+            }}
+            className="bg-gray-600 text-white px-3 py-2 rounded-md hover:bg-gray-700 text-sm"
+            title="Forzar actualización de la vista previa"
+          >
+            🔄 Actualizar
+          </button>
           <button
             onClick={() => downloadPreview('html')}
             className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700"
@@ -328,13 +483,21 @@ export default function PlantillaPreviewPage({ params }: { params: Promise<{ id:
             {/* Preview */}
             <div className="lg:col-span-2">
               <div className="bg-white border rounded-lg shadow-sm">
-                <div className="p-4 border-b bg-gray-50">
-                  <h3 className="font-semibold text-gray-900">Documento Renderizado</h3>
-                  <p className="text-sm text-gray-700 font-medium">Vista previa con datos de ejemplo</p>
+                <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Documento Renderizado</h3>
+                    <p className="text-sm text-gray-700 font-medium">Vista previa con datos de ejemplo</p>
+                  </div>
+                  {isUpdating && (
+                    <div className="flex items-center text-blue-600">
+                      <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full mr-2"></div>
+                      <span className="text-sm font-medium">Actualizando...</span>
+                    </div>
+                  )}
                 </div>
                 <div className="p-6">
                   <div 
-                    className="prose max-w-none whitespace-pre-wrap font-serif leading-relaxed text-gray-900"
+                    className={`prose max-w-none whitespace-pre-wrap font-serif leading-relaxed text-gray-900 ${isUpdating ? 'opacity-50' : ''}`}
                     style={{ minHeight: '400px' }}
                   >
                     {renderedContent}
@@ -395,22 +558,48 @@ export default function PlantillaPreviewPage({ params }: { params: Promise<{ id:
               </div>
 
               <div className="bg-white border rounded-lg shadow-sm p-4">
-                <h3 className="font-semibold text-gray-900 mb-3">⚙️ Variables Principales</h3>
-                <div className="space-y-3">
-                  {['nombre_empresa', 'nit_empresa', 'email_empresa'].map((variable) => (
-                    <div key={variable}>
-                      <label className="block text-sm font-semibold text-gray-800 mb-1">
-                        {variable.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                      </label>
-                      <input
-                        type="text"
-                        value={previewData[variable] || ''}
-                        onChange={(e) => handleVariableChange(variable, e.target.value)}
-                        className="w-full px-3 py-2 text-sm text-gray-900 font-medium border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                      />
-                    </div>
-                  ))}
-                </div>
+                <h3 className="font-semibold text-gray-900 mb-3">⚙️ Variables de Plantilla</h3>
+                {loadingData ? (
+                  <div className="text-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto"></div>
+                    <p className="text-sm text-gray-500 mt-2">Cargando variables...</p>
+                  </div>
+                ) : variables && variables.length > 0 ? (
+                  <div className="space-y-3">
+                    {variables.slice(0, 5).map((variable) => (
+                      <div key={variable.id}>
+                        <label className="block text-sm font-semibold text-gray-800 mb-1">
+                          {variable.nombre}
+                        </label>
+                        <input
+                          type="text"
+                          value={variableValores[variable.nombre] || ''}
+                          onChange={(e) => handleVariableChange(variable.nombre, e.target.value)}
+                          placeholder={variable.valor_defecto || `Ingrese ${variable.nombre}`}
+                          className="w-full px-3 py-2 text-sm text-gray-900 font-medium border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                        />
+                        {variable.descripcion && (
+                          <p className="text-xs text-gray-500 mt-1">{variable.descripcion}</p>
+                        )}
+                      </div>
+                    ))}
+                    {variables.length > 5 && (
+                      <p className="text-xs text-gray-500">Ver todas en la pestaña "Variables"</p>
+                    )}
+                  </div>
+                ) : selectedEmpresaId ? (
+                  <div className="text-center py-4 text-gray-500">
+                    <p className="text-sm">No hay variables definidas.</p>
+                    <button 
+                      onClick={syncVariables}
+                      className="mt-2 text-blue-600 hover:text-blue-800 underline text-sm"
+                    >
+                      Sincronizar desde contenido
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">Selecciona una empresa primero</p>
+                )}
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -421,6 +610,37 @@ export default function PlantillaPreviewPage({ params }: { params: Promise<{ id:
                   <li>• Descarga el documento en diferentes formatos</li>
                 </ul>
               </div>
+
+              {/* Variables detectadas en el documento */}
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <h4 className="font-semibold text-yellow-900 mb-2">🔍 Variables en el Documento</h4>
+                <div className="text-sm text-yellow-800">
+                  {(() => {
+                    if (!plantilla) return 'No hay plantilla cargada';
+                    
+                    const content = plantilla.contenido;
+                    const variableMatches = content.match(/\{[^}]+\}|\{\{[^}]+\}\}|\[[^\]]+\]/g) || [];
+                    const uniqueVars = [...new Set(variableMatches)];
+                    
+                    if (uniqueVars.length === 0) {
+                      return 'No se detectaron variables en el documento';
+                    }
+                    
+                    return (
+                      <div className="grid grid-cols-2 gap-1">
+                        {uniqueVars.slice(0, 8).map((variable, index) => (
+                          <div key={index} className="bg-yellow-100 px-2 py-1 rounded text-xs font-mono">
+                            {variable}
+                          </div>
+                        ))}
+                        {uniqueVars.length > 8 && (
+                          <div className="text-xs">y {uniqueVars.length - 8} más...</div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
             </div>
           </>
         ) : (
@@ -428,21 +648,46 @@ export default function PlantillaPreviewPage({ params }: { params: Promise<{ id:
           <div className="lg:col-span-3">
             <div className="bg-white border rounded-lg shadow-sm p-6">
               <h3 className="font-semibold text-gray-900 mb-4">Configurar Todas las Variables</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {Object.entries(previewData).map(([variable, value]) => (
-                  <div key={variable}>
-                    <label className="block text-sm font-semibold text-gray-800 mb-1">
-                      {variable}
-                    </label>
-                    <input
-                      type="text"
-                      value={value}
-                      onChange={(e) => handleVariableChange(variable, e.target.value)}
-                      className="w-full px-3 py-2 text-sm text-gray-900 font-medium border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                    />
-                  </div>
-                ))}
-              </div>
+              {loadingData ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+                  <p className="text-gray-500 mt-2">Cargando variables...</p>
+                </div>
+              ) : variables && variables.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {variables.map((variable) => (
+                    <div key={variable.id}>
+                      <label className="block text-sm font-semibold text-gray-800 mb-1">
+                        {variable.nombre}
+                      </label>
+                      <input
+                        type="text"
+                        value={variableValores[variable.nombre] || ''}
+                        onChange={(e) => handleVariableChange(variable.nombre, e.target.value)}
+                        placeholder={variable.valor_defecto || `Ingrese ${variable.nombre}`}
+                        className="w-full px-3 py-2 text-sm text-gray-900 font-medium border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                      />
+                      {variable.descripcion && (
+                        <p className="text-xs text-gray-500 mt-1">{variable.descripcion}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : selectedEmpresaId ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No hay variables definidas para esta plantilla.</p>
+                  <button 
+                    onClick={syncVariables}
+                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Sincronizar variables desde contenido
+                  </button>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>Selecciona una empresa para configurar las variables</p>
+                </div>
+              )}
             </div>
           </div>
         )}
