@@ -34,17 +34,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const client = await import('pg').then(pg => new pg.Client(process.env.DATABASE_URL));
-    await client.connect();
-
     // Verificar que el código no exista
-    const existing = await client.query(
+    const existing = await query(
       'SELECT id FROM impuestos WHERE codigo = $1',
       [codigo]
     );
 
     if (existing.rows.length > 0) {
-      await client.end();
       return NextResponse.json(
         { success: false, error: 'Ya existe un impuesto con ese código' },
         { status: 400 }
@@ -52,14 +48,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Crear el impuesto
-    const result = await client.query(
+    const result = await query(
       `INSERT INTO impuestos (nombre, codigo, tipo, periodicidad, descripcion, color)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
       [nombre, codigo, tipo, periodicidad, descripcion, color || '#3B82F6']
     );
-
-    await client.end();
 
     return NextResponse.json({
       success: true,
