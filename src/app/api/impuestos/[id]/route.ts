@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AuthService } from '@/services/authService';
+import { query } from '@/lib/database';
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -20,17 +21,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       );
     }
 
-    const client = await import('pg').then(pg => new pg.Client(process.env.DATABASE_URL));
-    await client.connect();
+    // const client = await import('pg').then(pg => new pg.Client(process.env.DATABASE_URL));
+    // await client.connect();
 
     // Verificar que el impuesto existe
-    const existingImpuesto = await client.query(
+    const existingImpuesto = await query(
       'SELECT id FROM impuestos WHERE id = $1',
       [impuestoId]
     );
 
     if (existingImpuesto.rows.length === 0) {
-      await client.end();
       return NextResponse.json(
         { success: false, error: 'Impuesto no encontrado' },
         { status: 404 }
@@ -38,13 +38,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Verificar que el código no exista en otro impuesto
-    const existingCodigo = await client.query(
+    const existingCodigo = await query(
       'SELECT id FROM impuestos WHERE codigo = $1 AND id != $2',
       [codigo, impuestoId]
     );
 
     if (existingCodigo.rows.length > 0) {
-      await client.end();
       return NextResponse.json(
         { success: false, error: 'Ya existe otro impuesto con ese código' },
         { status: 400 }
@@ -52,7 +51,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Actualizar el impuesto
-    const result = await client.query(
+    const result = await query(
       `UPDATE impuestos
        SET nombre = $1, codigo = $2, tipo = $3, periodicidad = $4, descripcion = $5, color = $6, updated_at = CURRENT_TIMESTAMP
        WHERE id = $7
@@ -60,7 +59,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       [nombre, codigo, tipo, periodicidad, descripcion, color || '#3B82F6', impuestoId]
     );
 
-    await client.end();
+    // await client.end();
 
     return NextResponse.json({
       success: true,
@@ -98,17 +97,13 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       );
     }
 
-    const client = await import('pg').then(pg => new pg.Client(process.env.DATABASE_URL));
-    await client.connect();
-
     // Verificar que el impuesto existe
-    const existingImpuesto = await client.query(
+    const existingImpuesto = await query(
       'SELECT id FROM impuestos WHERE id = $1',
       [impuestoId]
     );
 
     if (existingImpuesto.rows.length === 0) {
-      await client.end();
       return NextResponse.json(
         { success: false, error: 'Impuesto no encontrado' },
         { status: 404 }
@@ -116,11 +111,11 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
 
     // Verificar permisos - obtener el nombre del rol del usuario
-    const roleResult = await client.query('SELECT nombre FROM roles WHERE id = $1', [user.role_id]);
+    const roleResult = await query('SELECT nombre FROM roles WHERE id = $1', [user.role_id]);
     const isSuperAdmin = roleResult.rows.length > 0 && roleResult.rows[0].nombre === 'super_admin';
 
     // Verificar si hay vencimientos asociados
-    const vencimientosCount = await client.query(
+    const vencimientosCount = await query(
       'SELECT COUNT(*) as count FROM vencimientos_impuestos WHERE impuesto_id = $1',
       [impuestoId]
     );
@@ -128,7 +123,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const hasVencimientos = parseInt(vencimientosCount.rows[0].count) > 0;
 
     if (hasVencimientos && !isSuperAdmin) {
-      await client.end();
       return NextResponse.json(
         { success: false, error: 'No se puede eliminar el impuesto porque tiene vencimientos asociados. Elimine primero los vencimientos o contacte a un administrador.' },
         { status: 400 }
@@ -137,22 +131,20 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     // Si tiene vencimientos asociados y es super admin, eliminar también los vencimientos
     if (hasVencimientos && isSuperAdmin) {
-      await client.query(
+      await query(
         'DELETE FROM vencimientos_impuestos WHERE impuesto_id = $1',
         [impuestoId]
       );
     }
 
     // Eliminar el impuesto
-    const result = await client.query(
+    const result = await query(
       `UPDATE impuestos
        SET activo = false, updated_at = CURRENT_TIMESTAMP
        WHERE id = $1
        RETURNING *`,
       [impuestoId]
     );
-
-    await client.end();
 
     return NextResponse.json({
       success: true,
