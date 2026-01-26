@@ -562,6 +562,22 @@ export default function CalendarioTributarioComponent({
   const authorizeGoogleCalendar = async () => {
     if (googleCalendarAuthUrl) {
       window.open(googleCalendarAuthUrl, '_blank');
+    } else {
+      // Intentar obtener authUrl si no está disponible
+      try {
+        const response = await fetch('/api/google-calendar/status');
+        const data = await response.json();
+        if (data.authRequired && data.authUrl) {
+          setGoogleCalendarAuthUrl(data.authUrl);
+          setShowGoogleAuth(true);
+          window.open(data.authUrl, '_blank');
+        } else {
+          alert('No se pudo obtener la URL de autorización. Verifica la configuración de Google Calendar.');
+        }
+      } catch (error) {
+        console.error('Error obteniendo authUrl:', error);
+        alert('Error conectando con Google Calendar. Inténtalo de nuevo.');
+      }
     }
   };
 
@@ -925,7 +941,7 @@ Generado automáticamente por SADI`,
               )}
 
               {/* Botón de autorización OAuth */}
-              {showGoogleAuth && googleCalendarAuthUrl && (
+              {googleCalendarConnected === false && (
                 <button
                   onClick={authorizeGoogleCalendar}
                   className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
@@ -933,7 +949,7 @@ Generado automáticamente por SADI`,
                   <svg className="-ml-1 mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
-                  Autorizar Google Calendar
+                  Conectar Google Calendar
                 </button>
               )}
             </div>
