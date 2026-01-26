@@ -265,8 +265,8 @@ export class GoogleCalendarService {
   async createEvent(eventData: {
     summary: string;
     description: string;
-    startDate: string; // formato YYYY-MM-DD (evento de todo el día)
-    endDate?: string; // formato YYYY-MM-DD (evento de todo el día)
+    startDate: string; // formato YYYY-MM-DD
+    endDate?: string; // formato YYYY-MM-DD (opcional)
     reminders?: { minutes: number }[];
     attendees?: string[]; // Lista de correos electrónicos de invitados
     colorId?: string; // ID del color de Google Calendar (1-11)
@@ -289,10 +289,12 @@ export class GoogleCalendarService {
         summary: eventData.summary,
         description: eventData.description,
         start: {
-          date: eventData.startDate, // Evento de todo el día
+          dateTime: new Date(eventData.startDate + 'T00:00:00-05:00').toISOString(), // Inicio del día en zona horaria de Colombia (UTC-5)
+          timeZone: 'America/Bogota',
         },
         end: {
-          date: eventData.endDate ? new Date(new Date(eventData.endDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0] : new Date(new Date(eventData.startDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Día siguiente para eventos de un día
+          dateTime: new Date(eventData.startDate + 'T23:59:59-05:00').toISOString(), // Fin del día en zona horaria de Colombia (UTC-5)
+          timeZone: 'America/Bogota',
         },
         reminders: {
           useDefault: false,
