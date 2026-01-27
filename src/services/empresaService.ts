@@ -6,11 +6,12 @@ export class EmpresaService {
   static async create(empresa: Empresa): Promise<{ success: boolean; data?: Empresa; error?: string }> {
     const client = await pool.connect();
     try {
+      const trimmedNit = empresa.nit.trim();
       // Verificar si NIT existe
-      const existingQuery = 'SELECT id FROM empresas WHERE nit = $1';
-      const existing = await client.query(existingQuery, [empresa.nit]);
+      const existingQuery = 'SELECT id FROM empresas WHERE TRIM(nit) = $1';
+      const existing = await client.query(existingQuery, [trimmedNit]);
       if (existing.rows.length > 0) {
-        return { success: false, error: `Ya existe una empresa con NIT ${empresa.nit}` };
+        return { success: false, error: `Ya existe una empresa con NIT ${trimmedNit}` };
       }
 
       const insertQuery = `
@@ -21,7 +22,7 @@ export class EmpresaService {
       `;
 
       const values = [
-        empresa.nit,
+        trimmedNit,
         empresa.nombre,
         empresa.tipo,
         empresa.estado,
@@ -56,11 +57,12 @@ export class EmpresaService {
   static async getByNit(nit: string): Promise<{ success: boolean; data?: Empresa; error?: string }> {
     const client = await pool.connect();
     try {
-      const query = 'SELECT id, nit, nombre, tipo, estado, contador_id FROM empresas WHERE nit = $1';
-      const result = await client.query(query, [nit]);
+      const trimmedNit = nit.trim();
+      const query = 'SELECT id, nit, nombre, tipo, estado, contador_id FROM empresas WHERE TRIM(nit) = $1';
+      const result = await client.query(query, [trimmedNit]);
 
       if (result.rows.length === 0) {
-        return { success: false, error: `No se encontró empresa con NIT ${nit}` };
+        return { success: false, error: `No se encontró empresa con NIT ${trimmedNit}` };
       }
 
       const row = result.rows[0];
@@ -75,8 +77,6 @@ export class EmpresaService {
         resolucion: { activo: 0, renovado: 0, facturado: 0 },
         documento: { activo: 0, renovado: 0, facturado: 0 }
       };
-
-      return { success: true, data: empresa };
 
       return { success: true, data: empresa };
     } catch (error) {
@@ -118,7 +118,7 @@ export class EmpresaService {
     const client = await pool.connect();
     try {
       // Obtener empresa actual
-      const currentResult = await client.query('SELECT id, nit, nombre, tipo, estado FROM empresas WHERE id = $1', [id]);
+      const currentResult = await client.query('SELECT id, nit, nombre, tipo, estado, contador_id FROM empresas WHERE id = $1', [id]);
       if (currentResult.rows.length === 0) {
         return { success: false, error: 'Empresa no encontrada' };
       }
@@ -133,7 +133,7 @@ export class EmpresaService {
           estado = $3,
           fecha_actualizacion = NOW()
         WHERE id = $4
-        RETURNING id, nit, nombre, tipo, estado
+        RETURNING id, nit, nombre, tipo, estado, contador_id
       `;
 
       const values = [
@@ -153,6 +153,7 @@ export class EmpresaService {
         nombre: updatedRow.nombre,
         tipo: updatedRow.tipo,
         estado: updatedRow.estado,
+        contador_id: updatedRow.contador_id,
         certificado: { activo: 0, renovado: 0, facturado: 0 },
         resolucion: { activo: 0, renovado: 0, facturado: 0 },
         documento: { activo: 0, renovado: 0, facturado: 0 }
@@ -170,6 +171,9 @@ export class EmpresaService {
   static async delete(id: number): Promise<{ success: boolean; error?: string }> {
     const client = await pool.connect();
     try {
+      // Desasignar contador antes de eliminar
+      await client.query('UPDATE empresas SET contador_id = NULL WHERE id = $1', [id]);
+      
       const query = 'DELETE FROM empresas WHERE id = $1';
       await client.query(query, [id]);
       return { success: true };

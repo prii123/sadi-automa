@@ -692,9 +692,9 @@ function CertificadosTab({ certificados, showForm, setShowForm, formData, setFor
               <div className="flex items-center justify-between">
                 <div className="flex-1">
                   <div className="flex items-center">
-                    <p className="text-sm font-medium text-gray-900">
+                    {/* <p className="text-sm font-medium text-gray-900">
                       Certificado #{cert.id}
-                    </p>
+                    </p> */}
                     <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       cert.activo === 1
                         ? 'bg-green-100 text-green-800'
@@ -810,9 +810,9 @@ function ResolucionesTab({ resoluciones, showForm, setShowForm, formData, setFor
               <div className="flex items-center justify-between">
                 <div className="flex-1">
                   <div className="flex items-center">
-                    <p className="text-sm font-medium text-gray-900">
+                    {/* <p className="text-sm font-medium text-gray-900">
                       Resolución #{res.id}
-                    </p>
+                    </p> */}
                     <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       res.activo === 1
                         ? 'bg-green-100 text-green-800'
@@ -928,9 +928,9 @@ function DocumentosTab({ documentos, showForm, setShowForm, formData, setFormDat
               <div className="flex items-center justify-between">
                 <div className="flex-1">
                   <div className="flex items-center">
-                    <p className="text-sm font-medium text-gray-900">
+                    {/* <p className="text-sm font-medium text-gray-900">
                       Documento #{doc.id}
-                    </p>
+                    </p> */}
                     <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       doc.activo === 1
                         ? 'bg-green-100 text-green-800'
