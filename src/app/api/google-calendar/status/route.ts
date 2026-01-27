@@ -26,6 +26,17 @@ export async function GET() {
         });
       }
 
+      // Si la API no está habilitada
+      if (result.apiDisabled) {
+        return NextResponse.json({
+          success: true,
+          connected: false,
+          apiDisabled: true,
+          error: result.error,
+          message: 'La API de Google Calendar no está habilitada'
+        });
+      }
+
       return NextResponse.json({
         success: true,
         connected: false,

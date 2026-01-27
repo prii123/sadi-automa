@@ -99,6 +99,7 @@ export default function CalendarioTributarioComponent({
   const [googleCalendarConnected, setGoogleCalendarConnected] = useState<boolean | null>(null);
   const [googleCalendarAuthUrl, setGoogleCalendarAuthUrl] = useState<string | null>(null);
   const [showGoogleAuth, setShowGoogleAuth] = useState(false);
+  const [googleCalendarApiDisabled, setGoogleCalendarApiDisabled] = useState(false);
 
   // Estados para operaciones masivas
   const [syncingAllToGoogle, setSyncingAllToGoogle] = useState(false);
@@ -336,6 +337,7 @@ export default function CalendarioTributarioComponent({
 
       const wasConnected = googleCalendarConnected;
       setGoogleCalendarConnected(data.connected);
+      setGoogleCalendarApiDisabled(data.apiDisabled || false);
 
       if (data.authRequired) {
         setGoogleCalendarAuthUrl(data.authUrl);
@@ -347,9 +349,14 @@ export default function CalendarioTributarioComponent({
         setShowGoogleAuth(false);
         setGoogleCalendarAuthUrl(null);
       }
+
+      if (data.apiDisabled) {
+        setOauthMessage({ type: 'error', message: 'La API de Google Calendar no está habilitada. Ve a Google Cloud Console para habilitarla.' });
+      }
     } catch (error) {
       console.error('Error verificando conexión con Google Calendar:', error);
       setGoogleCalendarConnected(false);
+      setGoogleCalendarApiDisabled(false);
       setShowGoogleAuth(false);
       if (googleCalendarConnected === true) {
         setOauthMessage({ type: 'error', message: 'Error verificando conexión con Google Calendar' });
@@ -886,29 +893,37 @@ Generado automáticamente por SADI`,
               <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
                 googleCalendarConnected === true
                   ? 'bg-green-50 border border-green-200'
-                  : googleCalendarConnected === false
-                    ? 'bg-red-50 border border-red-200'
-                    : 'bg-yellow-50 border border-yellow-200'
+                  : googleCalendarApiDisabled
+                    ? 'bg-orange-50 border border-orange-200'
+                    : googleCalendarConnected === false
+                      ? 'bg-red-50 border border-red-200'
+                      : 'bg-yellow-50 border border-yellow-200'
               }`}>
                 <div className={`w-3 h-3 rounded-full ${
                   googleCalendarConnected === true
                     ? 'bg-green-500'
-                    : googleCalendarConnected === false
-                      ? 'bg-red-500'
-                      : 'bg-yellow-500'
+                    : googleCalendarApiDisabled
+                      ? 'bg-orange-500'
+                      : googleCalendarConnected === false
+                        ? 'bg-red-500'
+                        : 'bg-yellow-500'
                 }`}></div>
                 <span className={`text-sm font-medium ${
                   googleCalendarConnected === true
                     ? 'text-green-800'
-                    : googleCalendarConnected === false
-                      ? 'text-red-800'
-                      : 'text-yellow-800'
+                    : googleCalendarApiDisabled
+                      ? 'text-orange-800'
+                      : googleCalendarConnected === false
+                        ? 'text-red-800'
+                        : 'text-yellow-800'
                 }`}>
                   {googleCalendarConnected === true
                     ? 'Google Calendar Conectado'
-                    : googleCalendarConnected === false
-                      ? 'Google Calendar No Conectado'
-                      : 'Verificando conexión...'
+                    : googleCalendarApiDisabled
+                      ? 'API de Google Calendar Deshabilitada'
+                      : googleCalendarConnected === false
+                        ? 'Google Calendar No Conectado'
+                        : 'Verificando conexión...'
                   }
                 </span>
               </div>
@@ -940,8 +955,8 @@ Generado automáticamente por SADI`,
                 </div>
               )}
 
-              {/* Botón de autorización OAuth */}
-              {googleCalendarConnected === false && (
+              {/* Botón de autorización OAuth o habilitar API */}
+              {googleCalendarConnected === false && !googleCalendarApiDisabled && (
                 <button
                   onClick={authorizeGoogleCalendar}
                   className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
@@ -951,6 +966,21 @@ Generado automáticamente por SADI`,
                   </svg>
                   Conectar Google Calendar
                 </button>
+              )}
+
+              {/* Botón para habilitar API */}
+              {googleCalendarApiDisabled && (
+                <a
+                  href="https://console.developers.google.com/apis/api/calendar-json.googleapis.com/overview?project=925863234529"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-orange-600 border border-transparent rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+                >
+                  <svg className="-ml-1 mr-2 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.293l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 010 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 010-1.414zM10 11a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                  </svg>
+                  Habilitar API de Google Calendar
+                </a>
               )}
             </div>
           </div>

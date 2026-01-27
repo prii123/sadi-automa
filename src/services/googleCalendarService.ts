@@ -102,6 +102,62 @@ export class GoogleCalendarService {
     }
   }
 
+  /**
+   * Asegurar que los tokens sean válidos, refrescándolos si es necesario
+   */
+  private async ensureValidTokens(): Promise<{ valid: boolean; authRequired?: boolean; authUrl?: string }> {
+    try {
+      // Verificar si tenemos tokens
+      if (!this.oauth2Client.credentials || !this.oauth2Client.credentials.access_token) {
+        return {
+          valid: false,
+          authRequired: true,
+          authUrl: this.generateAuthUrl()
+        };
+      }
+
+      // Verificar si el token está expirado y refrescarlo si es necesario
+      const now = Date.now();
+      const expiry = this.oauth2Client.credentials.expiry_date;
+
+      if (expiry && (expiry - now) < 5 * 60 * 1000) { // Menos de 5 minutos
+        console.log('🔄 Token expirado o próximo a expirar, intentando refresh automático...');
+
+        if (!this.oauth2Client.credentials.refresh_token) {
+          console.log('❌ No hay refresh token disponible');
+          return {
+            valid: false,
+            authRequired: true,
+            authUrl: this.generateAuthUrl()
+          };
+        }
+
+        try {
+          const { credentials } = await this.oauth2Client.refreshAccessToken();
+          this.oauth2Client.setCredentials(credentials);
+          await this.saveTokens(credentials);
+          console.log('✅ Token refrescado exitosamente');
+        } catch (refreshError) {
+          console.error('❌ Error refrescando token:', refreshError);
+          return {
+            valid: false,
+            authRequired: true,
+            authUrl: this.generateAuthUrl()
+          };
+        }
+      }
+
+      return { valid: true };
+    } catch (error) {
+      console.error('❌ Error en ensureValidTokens:', error);
+      return {
+        valid: false,
+        authRequired: true,
+        authUrl: this.generateAuthUrl()
+      };
+    }
+  }
+
   private async loadTokens() {
     try {
       console.log('🔄 Cargando tokens desde base de datos...');
@@ -275,13 +331,14 @@ export class GoogleCalendarService {
       // Asegurar que el cliente de calendar esté inicializado
       this.ensureCalendarInitialized();
 
-      // Verificar si tenemos tokens válidos
-      if (!this.oauth2Client.credentials || !this.oauth2Client.credentials.access_token) {
+      // Asegurar que los tokens sean válidos
+      const tokenCheck = await this.ensureValidTokens();
+      if (!tokenCheck.valid) {
         return {
           success: false,
-          error: 'No hay tokens de autenticación. Ejecuta la autorización primero.',
-          authRequired: true,
-          authUrl: this.generateAuthUrl()
+          error: 'Tokens de autenticación inválidos o expirados.',
+          authRequired: tokenCheck.authRequired,
+          authUrl: tokenCheck.authUrl
         };
       }
 
@@ -359,19 +416,18 @@ export class GoogleCalendarService {
       // Asegurar que el cliente de calendar esté inicializado
       this.ensureCalendarInitialized();
 
-      console.log('🗑️ Verificando tokens antes de eliminar evento...');
-      // Verificar si tenemos tokens válidos
-      if (!this.oauth2Client.credentials || !this.oauth2Client.credentials.access_token) {
-        console.log('❌ No hay tokens de acceso disponibles');
+      // Asegurar que los tokens sean válidos
+      const tokenCheck = await this.ensureValidTokens();
+      if (!tokenCheck.valid) {
         return {
           success: false,
-          error: 'No hay tokens de autenticación. Ejecuta la autorización primero.',
-          authRequired: true,
-          authUrl: this.generateAuthUrl()
+          error: 'Tokens de autenticación inválidos o expirados.',
+          authRequired: tokenCheck.authRequired,
+          authUrl: tokenCheck.authUrl
         };
       }
 
-      console.log('✅ Tokens disponibles, eliminando evento de Google Calendar...');
+      console.log('✅ Tokens válidos, eliminando evento de Google Calendar...');
       await this.calendar.events.delete({
         calendarId: this.calendarId,
         eventId: eventId,
@@ -507,13 +563,14 @@ export class GoogleCalendarService {
       // Asegurar que el cliente de calendar esté inicializado
       this.ensureCalendarInitialized();
 
-      // Verificar si tenemos tokens válidos
-      if (!this.oauth2Client.credentials || !this.oauth2Client.credentials.access_token) {
+      // Asegurar que los tokens sean válidos
+      const tokenCheck = await this.ensureValidTokens();
+      if (!tokenCheck.valid) {
         return {
           success: false,
-          error: 'No hay tokens de autenticación configurados.',
-          authRequired: true,
-          authUrl: this.generateAuthUrl()
+          error: 'Tokens de autenticación inválidos o expirados.',
+          authRequired: tokenCheck.authRequired,
+          authUrl: tokenCheck.authUrl
         };
       }
 
@@ -530,8 +587,44 @@ export class GoogleCalendarService {
     } catch (error) {
       console.error('Error conectando a Google Calendar:', error);
 
+      // Si es un error de autenticación (401 unauthorized_client), intentar refresh
+      if (error && typeof error === 'object' && 'code' in error && error.code === 401) {
+        console.log('🔄 Error 401 detectado, intentando refrescar tokens automáticamente...');
+
+        try {
+          if (this.oauth2Client.credentials?.refresh_token) {
+            const { credentials } = await this.oauth2Client.refreshAccessToken();
+            this.oauth2Client.setCredentials(credentials);
+            await this.saveTokens(credentials);
+            console.log('✅ Tokens refrescados exitosamente, reintentando conexión...');
+
+            // Reintentar la conexión con los tokens nuevos
+            const response = await this.calendar.calendars.get({
+              calendarId: this.calendarId,
+            });
+
+            return {
+              success: true,
+              calendarName: response.data.summary,
+              message: `Conectado exitosamente a Google Calendar: ${response.data.summary}`
+            };
+          }
+        } catch (refreshError) {
+          console.error('❌ Error refrescando tokens en catch:', refreshError);
+        }
+      }
+
+      // Si es un error de API no habilitada (403), mostrar mensaje específico
+      if (error && typeof error === 'object' && 'code' in error && error.code === 403) {
+        return {
+          success: false,
+          error: 'La API de Google Calendar no está habilitada en tu proyecto de Google Cloud Console. Ve a https://console.developers.google.com/apis/api/calendar-json.googleapis.com/overview?project=925863234529 y habilita la API de Google Calendar.',
+          apiDisabled: true
+        };
+      }
+
       // Si es un error de autenticación, sugerir reautorización
-      if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' && (error.message.includes('invalid_grant') || error.message.includes('No refresh token is set') || error.message.includes('refresh token'))) {
+      if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' && (error.message.includes('invalid_grant') || error.message.includes('No refresh token is set') || error.message.includes('refresh token') || error.message.includes('unauthorized_client'))) {
         return {
           success: false,
           error: 'Tokens expirados o inválidos. Se requiere reautorización.',

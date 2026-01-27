@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error('Error en OAuth callback:', error);
       return NextResponse.redirect(
-        new URL('/calendario-tributario?error=oauth_error&message=' + encodeURIComponent(error), request.url)
+        new URL('/impuestos/calendario-tributario?error=oauth_error&message=' + encodeURIComponent(error), request.url)
       );
     }
 
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     if (!code) {
       console.error('No se recibió código de autorización');
       return NextResponse.redirect(
-        new URL('/calendario-tributario?error=no_code', request.url)
+        new URL('/impuestos/calendario-tributario?error=no_code', request.url)
       );
     }
 
@@ -30,19 +30,19 @@ export async function GET(request: NextRequest) {
     if (result.success) {
       console.log('✅ Tokens OAuth configurados exitosamente');
       return NextResponse.redirect(
-        new URL('/calendario-tributario?success=oauth_complete&message=' + encodeURIComponent('Google Calendar autorizado exitosamente'), request.url)
+        new URL('/impuestos/calendario-tributario?success=oauth_complete&message=' + encodeURIComponent('Google Calendar autorizado exitosamente'), request.url)
       );
     } else {
       console.error('Error configurando tokens:', result.error);
       return NextResponse.redirect(
-        new URL('/calendario-tributario?error=token_error&message=' + encodeURIComponent(result.error || 'Error desconocido'), request.url)
+        new URL('/impuestos/calendario-tributario?error=token_error&message=' + encodeURIComponent(result.error || 'Error desconocido'), request.url)
       );
     }
 
   } catch (error) {
     console.error('Error en callback OAuth:', error);
     return NextResponse.redirect(
-      new URL('/calendario-tributario?error=server_error&message=' + encodeURIComponent('Error interno del servidor'), request.url)
+      new URL('/impuestos/calendario-tributario?error=server_error&message=' + encodeURIComponent('Error interno del servidor'), request.url)
     );
   }
 }
