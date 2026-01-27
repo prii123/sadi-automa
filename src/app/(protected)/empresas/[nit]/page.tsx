@@ -586,6 +586,9 @@ export default function EmpresaDetailPage() {
             setFormData={setCertificadoForm}
             onSubmit={handleCertificadoSubmit}
             onToggleStatus={toggleCertificadoStatus}
+            nit={nit}
+            empresa={empresa}
+            fetchEmpresaData={fetchEmpresaData}
           />
         )}
 
@@ -598,6 +601,9 @@ export default function EmpresaDetailPage() {
             setFormData={setResolucionForm}
             onSubmit={handleResolucionSubmit}
             onToggleStatus={toggleResolucionStatus}
+            nit={nit}
+            empresa={empresa}
+            fetchEmpresaData={fetchEmpresaData}
           />
         )}
 
@@ -610,6 +616,9 @@ export default function EmpresaDetailPage() {
             setFormData={setDocumentoForm}
             onSubmit={handleDocumentoSubmit}
             onToggleStatus={toggleDocumentoStatus}
+            nit={nit}
+            empresa={empresa}
+            fetchEmpresaData={fetchEmpresaData}
           />
         )}
       </div>
@@ -618,13 +627,67 @@ export default function EmpresaDetailPage() {
 }
 
 // Componente para la tab de certificados
-function CertificadosTab({ certificados, showForm, setShowForm, formData, setFormData, onSubmit, onToggleStatus }: any) {
+function CertificadosTab({ certificados, showForm, setShowForm, formData, setFormData, onSubmit, onToggleStatus, nit, empresa, fetchEmpresaData }: any) {
+  const [editingCertificado, setEditingCertificado] = useState<Certificado | null>(null);
+
+  const handleEdit = (cert: Certificado) => {
+    setEditingCertificado(cert);
+    setFormData({
+      fecha_inicio: cert.fecha_inicio ? new Date(cert.fecha_inicio).toISOString().split('T')[0] : '',
+      fecha_final: cert.fecha_final ? new Date(cert.fecha_final).toISOString().split('T')[0] : '',
+      notificacion: cert.notificacion || '',
+      comentarios: cert.comentarios || ''
+    });
+    setShowForm(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const url = editingCertificado 
+        ? `/api/empresas/${nit}/certificados/${editingCertificado.id}` 
+        : `/api/empresas/${nit}/certificados`;
+      const method = editingCertificado ? 'PATCH' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formData,
+          empresa_id: empresa?.id,
+          activo: editingCertificado ? editingCertificado.activo : 1,
+          renovado: editingCertificado ? editingCertificado.renovado : 0,
+          facturado: editingCertificado ? editingCertificado.facturado : 0
+        })
+      });
+
+      if (response.ok) {
+        setShowForm(false);
+        setFormData({ fecha_inicio: '', fecha_final: '', notificacion: '', comentarios: '' });
+        setEditingCertificado(null);
+        fetchEmpresaData();
+      }
+    } catch (error) {
+      console.error('Error guardando certificado:', error);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({ fecha_inicio: '', fecha_final: '', notificacion: '', comentarios: '' });
+    setEditingCertificado(null);
+    setShowForm(false);
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Certificados</h2>
         <button
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => {
+            setEditingCertificado(null);
+            setFormData({ fecha_inicio: '', fecha_final: '', notificacion: '', comentarios: '' });
+            setShowForm(!showForm);
+          }}
           className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
         >
           {showForm ? 'Cancelar' : '+ Nuevo Certificado'}
@@ -633,52 +696,61 @@ function CertificadosTab({ certificados, showForm, setShowForm, formData, setFor
 
       {showForm && (
         <div className="bg-white p-6 rounded-lg shadow mb-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Nuevo Certificado</h3>
-          <form onSubmit={onSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">
+            {editingCertificado ? 'Editar Certificado' : 'Nuevo Certificado'}
+          </h3>
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Fecha Inicio</label>
+              <label className="block text-sm font-medium text-gray-900">Fecha Inicio</label>
               <input
                 type="date"
                 value={formData.fecha_inicio}
                 onChange={(e) => setFormData({...formData, fecha_inicio: e.target.value})}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Fecha Final</label>
+              <label className="block text-sm font-medium text-gray-900">Fecha Final</label>
               <input
                 type="date"
                 value={formData.fecha_final}
                 onChange={(e) => setFormData({...formData, fecha_final: e.target.value})}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                 required
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700">Notificación</label>
+              <label className="block text-sm font-medium text-gray-900">Notificación</label>
               <textarea
                 value={formData.notificacion}
                 onChange={(e) => setFormData({...formData, notificacion: e.target.value})}
                 rows={3}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700">Comentarios</label>
+              <label className="block text-sm font-medium text-gray-900">Comentarios</label>
               <textarea
                 value={formData.comentarios}
                 onChange={(e) => setFormData({...formData, comentarios: e.target.value})}
                 rows={2}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
               />
             </div>
-            <div className="md:col-span-2">
+            <div className="md:col-span-2 flex space-x-2">
               <button
                 type="submit"
                 className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
               >
-                Crear Certificado
+                {editingCertificado ? 'Actualizar' : 'Crear'} Certificado
+              </button>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+              >
+                Cancelar
               </button>
             </div>
           </form>
@@ -692,9 +764,6 @@ function CertificadosTab({ certificados, showForm, setShowForm, formData, setFor
               <div className="flex items-center justify-between">
                 <div className="flex-1">
                   <div className="flex items-center">
-                    {/* <p className="text-sm font-medium text-gray-900">
-                      Certificado #{cert.id}
-                    </p> */}
                     <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       cert.activo === 1
                         ? 'bg-green-100 text-green-800'
@@ -706,10 +775,17 @@ function CertificadosTab({ certificados, showForm, setShowForm, formData, setFor
                   <div className="mt-1 text-sm text-gray-600">
                     <p>Inicio: {cert.fecha_inicio ? new Date(cert.fecha_inicio).toLocaleDateString() : 'N/A'}</p>
                     <p>Final: {cert.fecha_final ? new Date(cert.fecha_final).toLocaleDateString() : 'N/A'}</p>
+                    {cert.notificacion && <p>Notificación: {cert.notificacion}</p>}
                     {cert.comentarios && <p>Comentarios: {cert.comentarios}</p>}
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => handleEdit(cert)}
+                    className="px-3 py-1 rounded text-sm font-medium bg-blue-100 text-blue-800 hover:bg-blue-200"
+                  >
+                    Editar
+                  </button>
                   <button
                     onClick={() => onToggleStatus(cert.id, cert.activo)}
                     className={`px-3 py-1 rounded text-sm font-medium ${
@@ -736,13 +812,67 @@ function CertificadosTab({ certificados, showForm, setShowForm, formData, setFor
 }
 
 // Componente para la tab de resoluciones
-function ResolucionesTab({ resoluciones, showForm, setShowForm, formData, setFormData, onSubmit, onToggleStatus }: any) {
+function ResolucionesTab({ resoluciones, showForm, setShowForm, formData, setFormData, onSubmit, onToggleStatus, nit, empresa, fetchEmpresaData }: any) {
+  const [editingResolucion, setEditingResolucion] = useState<Resolucion | null>(null);
+
+  const handleEdit = (res: Resolucion) => {
+    setEditingResolucion(res);
+    setFormData({
+      fecha_inicio: res.fecha_inicio ? new Date(res.fecha_inicio).toISOString().split('T')[0] : '',
+      fecha_final: res.fecha_final ? new Date(res.fecha_final).toISOString().split('T')[0] : '',
+      notificacion: res.notificacion || '',
+      comentarios: res.comentarios || ''
+    });
+    setShowForm(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const url = editingResolucion 
+        ? `/api/empresas/${nit}/resoluciones/${editingResolucion.id}` 
+        : `/api/empresas/${nit}/resoluciones`;
+      const method = editingResolucion ? 'PATCH' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formData,
+          empresa_id: empresa?.id,
+          activo: editingResolucion ? editingResolucion.activo : 1,
+          renovado: editingResolucion ? editingResolucion.renovado : 0,
+          facturado: editingResolucion ? editingResolucion.facturado : 0
+        })
+      });
+
+      if (response.ok) {
+        setShowForm(false);
+        setFormData({ fecha_inicio: '', fecha_final: '', notificacion: '', comentarios: '' });
+        setEditingResolucion(null);
+        fetchEmpresaData();
+      }
+    } catch (error) {
+      console.error('Error guardando resolución:', error);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({ fecha_inicio: '', fecha_final: '', notificacion: '', comentarios: '' });
+    setEditingResolucion(null);
+    setShowForm(false);
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Resoluciones</h2>
         <button
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => {
+            setEditingResolucion(null);
+            setFormData({ fecha_inicio: '', fecha_final: '', notificacion: '', comentarios: '' });
+            setShowForm(!showForm);
+          }}
           className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
         >
           {showForm ? 'Cancelar' : '+ Nueva Resolución'}
@@ -751,52 +881,61 @@ function ResolucionesTab({ resoluciones, showForm, setShowForm, formData, setFor
 
       {showForm && (
         <div className="bg-white p-6 rounded-lg shadow mb-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Nueva Resolución</h3>
-          <form onSubmit={onSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">
+            {editingResolucion ? 'Editar Resolución' : 'Nueva Resolución'}
+          </h3>
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Fecha Inicio</label>
+              <label className="block text-sm font-medium text-gray-900">Fecha Inicio</label>
               <input
                 type="date"
                 value={formData.fecha_inicio}
                 onChange={(e) => setFormData({...formData, fecha_inicio: e.target.value})}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Fecha Final</label>
+              <label className="block text-sm font-medium text-gray-900">Fecha Final</label>
               <input
                 type="date"
                 value={formData.fecha_final}
                 onChange={(e) => setFormData({...formData, fecha_final: e.target.value})}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                 required
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700">Notificación</label>
+              <label className="block text-sm font-medium text-gray-900">Notificación</label>
               <textarea
                 value={formData.notificacion}
                 onChange={(e) => setFormData({...formData, notificacion: e.target.value})}
                 rows={3}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700">Comentarios</label>
+              <label className="block text-sm font-medium text-gray-900">Comentarios</label>
               <textarea
                 value={formData.comentarios}
                 onChange={(e) => setFormData({...formData, comentarios: e.target.value})}
                 rows={2}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
               />
             </div>
-            <div className="md:col-span-2">
+            <div className="md:col-span-2 flex space-x-2">
               <button
                 type="submit"
                 className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
               >
-                Crear Resolución
+                {editingResolucion ? 'Actualizar' : 'Crear'} Resolución
+              </button>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+              >
+                Cancelar
               </button>
             </div>
           </form>
@@ -810,9 +949,6 @@ function ResolucionesTab({ resoluciones, showForm, setShowForm, formData, setFor
               <div className="flex items-center justify-between">
                 <div className="flex-1">
                   <div className="flex items-center">
-                    {/* <p className="text-sm font-medium text-gray-900">
-                      Resolución #{res.id}
-                    </p> */}
                     <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       res.activo === 1
                         ? 'bg-green-100 text-green-800'
@@ -824,10 +960,17 @@ function ResolucionesTab({ resoluciones, showForm, setShowForm, formData, setFor
                   <div className="mt-1 text-sm text-gray-600">
                     <p>Inicio: {res.fecha_inicio ? new Date(res.fecha_inicio).toLocaleDateString() : 'N/A'}</p>
                     <p>Final: {res.fecha_final ? new Date(res.fecha_final).toLocaleDateString() : 'N/A'}</p>
+                    {res.notificacion && <p>Notificación: {res.notificacion}</p>}
                     {res.comentarios && <p>Comentarios: {res.comentarios}</p>}
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => handleEdit(res)}
+                    className="px-3 py-1 rounded text-sm font-medium bg-blue-100 text-blue-800 hover:bg-blue-200"
+                  >
+                    Editar
+                  </button>
                   <button
                     onClick={() => onToggleStatus(res.id, res.activo)}
                     className={`px-3 py-1 rounded text-sm font-medium ${
@@ -854,13 +997,67 @@ function ResolucionesTab({ resoluciones, showForm, setShowForm, formData, setFor
 }
 
 // Componente para la tab de documentos
-function DocumentosTab({ documentos, showForm, setShowForm, formData, setFormData, onSubmit, onToggleStatus }: any) {
+function DocumentosTab({ documentos, showForm, setShowForm, formData, setFormData, onSubmit, onToggleStatus, nit, empresa, fetchEmpresaData }: any) {
+  const [editingDocumento, setEditingDocumento] = useState<Documento | null>(null);
+
+  const handleEdit = (doc: Documento) => {
+    setEditingDocumento(doc);
+    setFormData({
+      fecha_inicio: doc.fecha_inicio ? new Date(doc.fecha_inicio).toISOString().split('T')[0] : '',
+      fecha_final: doc.fecha_final ? new Date(doc.fecha_final).toISOString().split('T')[0] : '',
+      notificacion: doc.notificacion || '',
+      comentarios: doc.comentarios || ''
+    });
+    setShowForm(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const url = editingDocumento 
+        ? `/api/empresas/${nit}/documentos/${editingDocumento.id}` 
+        : `/api/empresas/${nit}/documentos`;
+      const method = editingDocumento ? 'PATCH' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formData,
+          empresa_id: empresa?.id,
+          activo: editingDocumento ? editingDocumento.activo : 1,
+          renovado: editingDocumento ? editingDocumento.renovado : 0,
+          facturado: editingDocumento ? editingDocumento.facturado : 0
+        })
+      });
+
+      if (response.ok) {
+        setShowForm(false);
+        setFormData({ fecha_inicio: '', fecha_final: '', notificacion: '', comentarios: '' });
+        setEditingDocumento(null);
+        fetchEmpresaData();
+      }
+    } catch (error) {
+      console.error('Error guardando documento:', error);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({ fecha_inicio: '', fecha_final: '', notificacion: '', comentarios: '' });
+    setEditingDocumento(null);
+    setShowForm(false);
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Documentos</h2>
         <button
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => {
+            setEditingDocumento(null);
+            setFormData({ fecha_inicio: '', fecha_final: '', notificacion: '', comentarios: '' });
+            setShowForm(!showForm);
+          }}
           className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
         >
           {showForm ? 'Cancelar' : '+ Nuevo Documento'}
@@ -869,52 +1066,61 @@ function DocumentosTab({ documentos, showForm, setShowForm, formData, setFormDat
 
       {showForm && (
         <div className="bg-white p-6 rounded-lg shadow mb-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Nuevo Documento</h3>
-          <form onSubmit={onSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">
+            {editingDocumento ? 'Editar Documento' : 'Nuevo Documento'}
+          </h3>
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Fecha Inicio</label>
+              <label className="block text-sm font-medium text-gray-900">Fecha Inicio</label>
               <input
                 type="date"
                 value={formData.fecha_inicio}
                 onChange={(e) => setFormData({...formData, fecha_inicio: e.target.value})}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Fecha Final</label>
+              <label className="block text-sm font-medium text-gray-900">Fecha Final</label>
               <input
                 type="date"
                 value={formData.fecha_final}
                 onChange={(e) => setFormData({...formData, fecha_final: e.target.value})}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                 required
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700">Notificación</label>
+              <label className="block text-sm font-medium text-gray-900">Notificación</label>
               <textarea
                 value={formData.notificacion}
                 onChange={(e) => setFormData({...formData, notificacion: e.target.value})}
                 rows={3}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700">Comentarios</label>
+              <label className="block text-sm font-medium text-gray-900">Comentarios</label>
               <textarea
                 value={formData.comentarios}
                 onChange={(e) => setFormData({...formData, comentarios: e.target.value})}
                 rows={2}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900"
               />
             </div>
-            <div className="md:col-span-2">
+            <div className="md:col-span-2 flex space-x-2">
               <button
                 type="submit"
                 className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
               >
-                Crear Documento
+                {editingDocumento ? 'Actualizar' : 'Crear'} Documento
+              </button>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+              >
+                Cancelar
               </button>
             </div>
           </form>
@@ -928,9 +1134,9 @@ function DocumentosTab({ documentos, showForm, setShowForm, formData, setFormDat
               <div className="flex items-center justify-between">
                 <div className="flex-1">
                   <div className="flex items-center">
-                    {/* <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-medium text-gray-900">
                       Documento #{doc.id}
-                    </p> */}
+                    </p>
                     <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       doc.activo === 1
                         ? 'bg-green-100 text-green-800'
@@ -942,10 +1148,17 @@ function DocumentosTab({ documentos, showForm, setShowForm, formData, setFormDat
                   <div className="mt-1 text-sm text-gray-600">
                     <p>Inicio: {doc.fecha_inicio ? new Date(doc.fecha_inicio).toLocaleDateString() : 'N/A'}</p>
                     <p>Final: {doc.fecha_final ? new Date(doc.fecha_final).toLocaleDateString() : 'N/A'}</p>
+                    {doc.notificacion && <p>Notificación: {doc.notificacion}</p>}
                     {doc.comentarios && <p>Comentarios: {doc.comentarios}</p>}
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => handleEdit(doc)}
+                    className="px-3 py-1 rounded text-sm font-medium bg-blue-100 text-blue-800 hover:bg-blue-200"
+                  >
+                    Editar
+                  </button>
                   <button
                     onClick={() => onToggleStatus(doc.id, doc.activo)}
                     className={`px-3 py-1 rounded text-sm font-medium ${

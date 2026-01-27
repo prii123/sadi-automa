@@ -231,6 +231,22 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
 
           {/* Logout */}
           <div className="p-4 border-t border-gray-700">
+            <Link
+              href="/docs"
+              className="flex items-center w-full px-4 py-2 mb-2 text-sm font-medium text-gray-300 rounded-md hover:bg-gray-700 hover:text-white transition-colors"
+              onClick={() => setIsOpen(false)}
+            >
+              <span className="mr-3">📚</span>
+              API Docs
+            </Link>
+            <Link
+              href="/cambiar-contrasena"
+              className="flex items-center w-full px-4 py-2 mb-2 text-sm font-medium text-gray-300 rounded-md hover:bg-gray-700 hover:text-white transition-colors"
+              onClick={() => setIsOpen(false)}
+            >
+              <span className="mr-3">🔑</span>
+              Cambiar Contraseña
+            </Link>
             <button
               onClick={handleLogout}
               className="flex items-center w-full px-4 py-2 text-sm font-medium text-gray-300 rounded-md hover:bg-gray-700 hover:text-white transition-colors"

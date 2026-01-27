@@ -10,7 +10,13 @@ export async function PATCH(
     const resolucionId = parseInt(id);
     const body = await request.json();
 
-    const result = await ResolucionService.update(resolucionId, body);
+    const resolucionData = {
+      ...body,
+      ...(body.fecha_inicio !== undefined && { fecha_inicio: body.fecha_inicio ? new Date(body.fecha_inicio) : null }),
+      ...(body.fecha_final !== undefined && { fecha_final: body.fecha_final ? new Date(body.fecha_final) : null })
+    };
+
+    const result = await ResolucionService.update(resolucionId, resolucionData);
 
     if (result.success) {
       return NextResponse.json({ success: true, data: result.data });

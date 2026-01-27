@@ -106,30 +106,69 @@ export class DocumentoService {
   static async update(id: number, documento: Partial<Documento>): Promise<{ success: boolean; data?: Documento; error?: string }> {
     const client = await pool.connect();
     try {
+      // Construir dinámicamente la consulta basada en los campos proporcionados
+      const updateFields: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (documento.activo !== undefined) {
+        updateFields.push(`activo = $${paramIndex}`);
+        values.push(documento.activo);
+        paramIndex++;
+      }
+
+      if (documento.fecha_inicio !== undefined) {
+        updateFields.push(`fecha_inicio = $${paramIndex}`);
+        values.push(documento.fecha_inicio);
+        paramIndex++;
+      }
+
+      if (documento.fecha_final !== undefined) {
+        updateFields.push(`fecha_final = $${paramIndex}`);
+        values.push(documento.fecha_final);
+        paramIndex++;
+      }
+
+      if (documento.notificacion !== undefined) {
+        updateFields.push(`notificacion = $${paramIndex}`);
+        values.push(documento.notificacion);
+        paramIndex++;
+      }
+
+      if (documento.renovado !== undefined) {
+        updateFields.push(`renovado = $${paramIndex}`);
+        values.push(documento.renovado);
+        paramIndex++;
+      }
+
+      if (documento.facturado !== undefined) {
+        updateFields.push(`facturado = $${paramIndex}`);
+        values.push(documento.facturado);
+        paramIndex++;
+      }
+
+      if (documento.comentarios !== undefined) {
+        updateFields.push(`comentarios = $${paramIndex}`);
+        values.push(documento.comentarios);
+        paramIndex++;
+      }
+
+      // Siempre actualizar fecha_actualizacion
+      updateFields.push(`fecha_actualizacion = NOW()`);
+
+      if (updateFields.length === 1) {
+        // Solo se actualizó fecha_actualizacion, no hay cambios reales
+        return { success: false, error: 'No se proporcionaron campos para actualizar' };
+      }
+
       const updateQuery = `
         UPDATE documentos SET
-          activo = $1,
-          fecha_inicio = $2,
-          fecha_final = $3,
-          notificacion = $4,
-          renovado = $5,
-          facturado = $6,
-          comentarios = $7,
-          fecha_actualizacion = NOW()
-        WHERE id = $8
+          ${updateFields.join(', ')}
+        WHERE id = $${paramIndex}
         RETURNING *
       `;
 
-      const values = [
-        documento.activo,
-        documento.fecha_inicio,
-        documento.fecha_final,
-        documento.notificacion,
-        documento.renovado,
-        documento.facturado,
-        documento.comentarios,
-        id
-      ];
+      values.push(id);
 
       const result = await client.query(updateQuery, values);
 

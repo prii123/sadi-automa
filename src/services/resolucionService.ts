@@ -106,30 +106,69 @@ export class ResolucionService {
   static async update(id: number, resolucion: Partial<Resolucion>): Promise<{ success: boolean; data?: Resolucion; error?: string }> {
     const client = await pool.connect();
     try {
+      // Construir dinámicamente la consulta basada en los campos proporcionados
+      const updateFields: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (resolucion.activo !== undefined) {
+        updateFields.push(`activo = $${paramIndex}`);
+        values.push(resolucion.activo);
+        paramIndex++;
+      }
+
+      if (resolucion.fecha_inicio !== undefined) {
+        updateFields.push(`fecha_inicio = $${paramIndex}`);
+        values.push(resolucion.fecha_inicio);
+        paramIndex++;
+      }
+
+      if (resolucion.fecha_final !== undefined) {
+        updateFields.push(`fecha_final = $${paramIndex}`);
+        values.push(resolucion.fecha_final);
+        paramIndex++;
+      }
+
+      if (resolucion.notificacion !== undefined) {
+        updateFields.push(`notificacion = $${paramIndex}`);
+        values.push(resolucion.notificacion);
+        paramIndex++;
+      }
+
+      if (resolucion.renovado !== undefined) {
+        updateFields.push(`renovado = $${paramIndex}`);
+        values.push(resolucion.renovado);
+        paramIndex++;
+      }
+
+      if (resolucion.facturado !== undefined) {
+        updateFields.push(`facturado = $${paramIndex}`);
+        values.push(resolucion.facturado);
+        paramIndex++;
+      }
+
+      if (resolucion.comentarios !== undefined) {
+        updateFields.push(`comentarios = $${paramIndex}`);
+        values.push(resolucion.comentarios);
+        paramIndex++;
+      }
+
+      // Siempre actualizar fecha_actualizacion
+      updateFields.push(`fecha_actualizacion = NOW()`);
+
+      if (updateFields.length === 1) {
+        // Solo se actualizó fecha_actualizacion, no hay cambios reales
+        return { success: false, error: 'No se proporcionaron campos para actualizar' };
+      }
+
       const updateQuery = `
         UPDATE resoluciones SET
-          activo = $1,
-          fecha_inicio = $2,
-          fecha_final = $3,
-          notificacion = $4,
-          renovado = $5,
-          facturado = $6,
-          comentarios = $7,
-          fecha_actualizacion = NOW()
-        WHERE id = $8
+          ${updateFields.join(', ')}
+        WHERE id = $${paramIndex}
         RETURNING *
       `;
 
-      const values = [
-        resolucion.activo,
-        resolucion.fecha_inicio,
-        resolucion.fecha_final,
-        resolucion.notificacion,
-        resolucion.renovado,
-        resolucion.facturado,
-        resolucion.comentarios,
-        id
-      ];
+      values.push(id);
 
       const result = await client.query(updateQuery, values);
 

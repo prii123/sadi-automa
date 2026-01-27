@@ -16,7 +16,10 @@ export default function UsuariosPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasAccess, setHasAccess] = useState<boolean | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<Usuario | null>(null);
   const [editingUsuario, setEditingUsuario] = useState<Usuario | null>(null);
   const [formData, setFormData] = useState({
     username: '',
@@ -24,6 +27,10 @@ export default function UsuariosPage() {
     nombre: '',
     email: '',
     role_id: 5 // ID por defecto para 'usuario'
+  });
+  const [passwordData, setPasswordData] = useState({
+    newPassword: '',
+    confirmPassword: ''
   });
 
   // Verificar acceso y cargar datos
@@ -42,6 +49,10 @@ export default function UsuariosPage() {
         setLoading(false);
         return;
       }
+
+      // Verificar si es super_admin
+      const isSuperAdminUser = authData.user?.rol === 'super_admin';
+      setIsSuperAdmin(isSuperAdminUser);
 
       // Verificar permisos para el módulo Usuarios
       const permissionResponse = await fetch('/api/verificar-permiso', {
@@ -156,10 +167,45 @@ export default function UsuariosPage() {
     }
   };
 
-  const resetForm = () => {
-    setFormData({ username: '', password: '', nombre: '', email: '', role_id: 5 });
-    setEditingUsuario(null);
-    setShowForm(false);
+  const handleChangePassword = (usuario: Usuario) => {
+    setSelectedUser(usuario);
+    setPasswordData({ newPassword: '', confirmPassword: '' });
+    setShowPasswordModal(true);
+  };
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+
+    if (passwordData.newPassword.length < 8) {
+      alert('La contraseña debe tener al menos 8 caracteres');
+      return;
+    }
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      alert('Las contraseñas no coinciden');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/usuarios/${selectedUser.id}/cambiar-contrasena`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPassword: passwordData.newPassword })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        alert('Contraseña cambiada exitosamente');
+        setShowPasswordModal(false);
+        setSelectedUser(null);
+      } else {
+        alert(data.error || 'Error al cambiar la contraseña');
+      }
+    } catch (error) {
+      console.error('Error cambiando contraseña:', error);
+      alert('Error de conexión');
+    }
   };
 
   if (loading) {
@@ -273,7 +319,7 @@ export default function UsuariosPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={resetForm}
+                  onClick={() => setShowPasswordModal(false)}
                   className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors"
                 >
                   Cancelar
@@ -284,7 +330,59 @@ export default function UsuariosPage() {
         </div>
       )}
 
-      {/* Tabla de usuarios */}
+      {/* Modal para cambiar contraseña */}
+      {showPasswordModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full mx-4">
+            <h2 className="text-xl font-semibold mb-4">
+              Cambiar Contraseña de {selectedUser.nombre}
+            </h2>
+            <form onSubmit={handlePasswordSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nueva Contraseña
+                </label>
+                <input
+                  type="password"
+                  value={passwordData.newPassword}
+                  onChange={(e) => setPasswordData({...passwordData, newPassword: e.target.value})}
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                  minLength={8}
+                />
+                <p className="text-xs text-gray-500 mt-1">Mínimo 8 caracteres</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Confirmar Nueva Contraseña
+                </label>
+                <input
+                  type="password"
+                  value={passwordData.confirmPassword}
+                  onChange={(e) => setPasswordData({...passwordData, confirmPassword: e.target.value})}
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                />
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  type="submit"
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+                >
+                  Cambiar Contraseña
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPasswordModal(false)}
+                  className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-xl font-semibold text-gray-900">Usuarios Registrados</h2>
@@ -367,6 +465,14 @@ export default function UsuariosPage() {
                       >
                         Editar
                       </button>
+                      {isSuperAdmin && (
+                        <button
+                          onClick={() => handleChangePassword(usuario)}
+                          className="text-green-600 hover:text-green-900 mr-4"
+                        >
+                          Cambiar Contraseña
+                        </button>
+                      )}
                       <button
                         onClick={() => handleDelete(usuario.id!)}
                         className="text-red-600 hover:text-red-900"
