@@ -185,6 +185,7 @@ export default function ImpuestosPage() {
       const data = await response.json();
       if (data.success) {
         setVencimientos(data.vencimientos || []);
+        console.log('Vencimientos cargados:', data.vencimientos);
       } else {
         console.error('Error en la API de vencimientos:', data.error);
         setVencimientos([]);
@@ -519,7 +520,10 @@ export default function ImpuestosPage() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-CO');
+    // Parsear la fecha manualmente para evitar problemas de zona horaria
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day); // month - 1 porque Date usa 0-based
+    return date.toLocaleDateString('es-CO');
   };
 
   if (loading) {

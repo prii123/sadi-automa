@@ -43,16 +43,12 @@ export const processExcelFile = async (file: File): Promise<any[]> => {
       } else if (typeof cell === 'number' && cell > 40000 && cell < 80000) {
         // Convertir número serial de Excel a fecha
         const excelDate = new Date((cell - 25569) * 86400 * 1000); // 25569 es el offset de Excel
-        // Sumar un día para corregir el problema de pérdida de día
-        excelDate.setUTCDate(excelDate.getUTCDate() + 1);
         // Usar métodos UTC para evitar problemas de zona horaria
         const dia = excelDate.getUTCDate().toString().padStart(2, '0');
         const mes = (excelDate.getUTCMonth() + 1).toString().padStart(2, '0');
         const anio = excelDate.getUTCFullYear();
         processedRow[key] = `${dia}/${mes}/${anio}`;
       } else if (cell instanceof Date) {
-        // Sumar un día para corregir el problema de pérdida de día
-        cell.setUTCDate(cell.getUTCDate() + 1);
         // Usar métodos UTC para evitar problemas de zona horaria
         const dia = cell.getUTCDate().toString().padStart(2, '0');
         const mes = (cell.getUTCMonth() + 1).toString().padStart(2, '0');
