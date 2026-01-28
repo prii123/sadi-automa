@@ -81,9 +81,10 @@ export class CalendarioTributarioService {
 
     if (fechaEspecifica) {
       // Si hay una fecha específica para estos dígitos, usarla
-      // Asegurar que se interprete como fecha local, no UTC
+      // Parsear la fecha correctamente para evitar problemas de zona horaria
       const [year, month, day] = fechaEspecifica.split('-').map(Number);
-      return new Date(year, month - 1, day); // Meses en JS son 0-indexed
+      // Crear fecha en zona horaria local a mediodía
+      return new Date(year, month - 1, day - 1, 12, 0, 0, 0);
     } else {
       // Si no hay fecha específica, devolver null
       return null;

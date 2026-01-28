@@ -92,7 +92,7 @@ export default function VistaCalendarioComponent({
     try {
       let url = '/api/empresas';
       if (empresasSource === 'contador-asignadas' && userId) {
-        url = `/api/usuarios/${userId}/empresas`;
+        url = `/api/contadores/${userId}/empresas`;
       }
       
       const response = await fetch(url);
@@ -113,9 +113,8 @@ export default function VistaCalendarioComponent({
       let url = `/api/calendario-tributario/all?${params}`;
       
       // Si es para contador, filtrar por empresas asignadas
-      if (empresasSource === 'contador-asignadas' && userId && empresas.length > 0) {
-        const empresaIds = empresas.map(e => e.id).join(',');
-        params.append('empresas', empresaIds);
+      if (empresasSource === 'contador-asignadas' && userId) {
+        params.append('contadorId', userId.toString());
         url = `/api/calendario-tributario/all?${params}`;
       }
 
@@ -125,7 +124,7 @@ export default function VistaCalendarioComponent({
       if (data.success) {
         let filteredData = data.data;
 
-        // Filtrar por empresa
+        // Filtrar por empresa (solo cuando selectedEmpresa no es 'all')
         if (selectedEmpresa !== 'all') {
           filteredData = filteredData.filter((item: any) => item.empresa_id === selectedEmpresa);
         }

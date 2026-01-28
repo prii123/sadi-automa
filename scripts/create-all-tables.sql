@@ -154,7 +154,7 @@ CREATE TABLE IF NOT EXISTS calendario_tributario (
   empresa_id INTEGER REFERENCES empresas(id) ON DELETE CASCADE,
   impuesto_id INTEGER REFERENCES impuestos(id) ON DELETE CASCADE,
   vencimiento_impuesto_id INTEGER REFERENCES vencimientos_impuestos(id),
-  fecha_vencimiento DATE NOT NULL,
+  fecha_vencimiento TIMESTAMP WITHOUT TIME ZONE NOT NULL,
   periodo VARCHAR(20) NOT NULL,
   estado VARCHAR(20) DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'pagado', 'vencido', 'extemporaneo')),
   fecha_pago DATE,

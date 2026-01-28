@@ -33,8 +33,8 @@ export default function ContadorPage() {
         if (userData.success) {
           setUser(userData.user);
           
-          // Cargar empresas asignadas
-          const empresasResponse = await fetch(`/api/usuarios/${userData.user.id}/empresas`);
+          // Cargar empresas asignadas al contador
+          const empresasResponse = await fetch(`/api/contadores/${userData.user.id}/empresas`);
           const empresasData = await empresasResponse.json();
           
           if (empresasData.success) {

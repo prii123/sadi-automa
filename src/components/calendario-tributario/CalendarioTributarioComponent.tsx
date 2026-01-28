@@ -249,7 +249,7 @@ export default function CalendarioTributarioComponent({
     try {
       let url = '/api/empresas';
       if (empresasSource === 'contador-asignadas' && userId) {
-        url = `/api/usuarios/${userId}/empresas`;
+        url = `/api/contadores/${userId}/empresas`;
       }
       
       const response = await fetch(url);
