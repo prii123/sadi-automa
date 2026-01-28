@@ -48,12 +48,14 @@ interface VistaCalendarioComponentProps {
   empresasSource: 'all' | 'contador-asignadas';
   userId?: number;
   titulo?: string;
+  onEstadoChange?: (calendarioId: number, nuevoEstado: string) => Promise<void>;
 }
 
 export default function VistaCalendarioComponent({ 
   empresasSource = 'all', 
   userId, 
-  titulo = "Vista Calendario" 
+  titulo = "Vista Calendario",
+  onEstadoChange
 }: VistaCalendarioComponentProps) {
   const [events, setEvents] = useState<CalendarioEvent[]>([]);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
@@ -66,6 +68,8 @@ export default function VistaCalendarioComponent({
   const [selectedEvent, setSelectedEvent] = useState<CalendarioEvent | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSharedInGoogle, setIsSharedInGoogle] = useState(false);
+  const [updatingEstado, setUpdatingEstado] = useState(false);
+  const [modalEstado, setModalEstado] = useState<string>('');
   const router = useRouter();
 
   useEffect(() => {
@@ -187,12 +191,63 @@ export default function VistaCalendarioComponent({
 
   const handleSelectEvent = (event: CalendarioEvent) => {
     setSelectedEvent(event);
+    setModalEstado(event.resource.estado);
     setIsModalOpen(true);
   };
 
   const handleCloseModal = () => {
     setSelectedEvent(null);
     setIsModalOpen(false);
+    setModalEstado('');
+  };
+
+  const handleEstadoChange = async () => {
+    if (!selectedEvent || !modalEstado || modalEstado === selectedEvent.resource.estado) {
+      return;
+    }
+
+    setUpdatingEstado(true);
+    try {
+      if (onEstadoChange) {
+        // Si se proporciona una función externa, usarla
+        await onEstadoChange(selectedEvent.id, modalEstado);
+      } else {
+        // Lógica interna para actualizar el estado
+        const response = await fetch('/api/calendario-tributario/estado', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ calendarioId: selectedEvent.id, estado: modalEstado })
+        });
+
+        const data = await response.json();
+        if (!data.success) {
+          throw new Error(data.error || 'Error actualizando estado');
+        }
+      }
+
+      // Actualizar el evento localmente
+      setEvents(prevEvents =>
+        prevEvents.map(event =>
+          event.id === selectedEvent.id
+            ? { ...event, resource: { ...event.resource, estado: modalEstado } }
+            : event
+        )
+      );
+
+      // Actualizar el selectedEvent
+      setSelectedEvent(prev => prev ? { ...prev, resource: { ...prev.resource, estado: modalEstado } } : null);
+
+      // Recargar los datos para asegurar consistencia
+      await loadCalendario();
+
+      alert('Estado actualizado exitosamente');
+      handleCloseModal();
+    } catch (error) {
+      console.error('Error actualizando estado:', error);
+      alert('Error actualizando estado: ' + (error instanceof Error ? error.message : 'Error desconocido'));
+    } finally {
+      setUpdatingEstado(false);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -372,15 +427,17 @@ export default function VistaCalendarioComponent({
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Estado</label>
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      selectedEvent.resource.estado === 'pagado' ? 'bg-green-100 text-green-800' :
-                      selectedEvent.resource.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-800' :
-                      selectedEvent.resource.estado === 'vencido' ? 'bg-red-100 text-red-800' :
-                      selectedEvent.resource.estado === 'extemporaneo' ? 'bg-orange-100 text-orange-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {selectedEvent.resource.estado.charAt(0).toUpperCase() + selectedEvent.resource.estado.slice(1)}
-                    </span>
+                    <select
+                      value={modalEstado}
+                      onChange={(e) => setModalEstado(e.target.value)}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      disabled={updatingEstado}
+                    >
+                      <option value="pendiente">Pendiente</option>
+                      <option value="pagado">Pagado</option>
+                      <option value="vencido">Vencido</option>
+                      <option value="extemporaneo">Extemporáneo</option>
+                    </select>
                   </div>
                 </div>
 
@@ -401,12 +458,30 @@ export default function VistaCalendarioComponent({
                 )}
               </div>
 
-              <div className="mt-6 flex justify-end">
+              <div className="mt-6 flex justify-end space-x-3">
                 <button
                   onClick={handleCloseModal}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+                  className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700"
+                  disabled={updatingEstado}
                 >
-                  Cerrar
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleEstadoChange}
+                  disabled={updatingEstado || modalEstado === selectedEvent.resource.estado}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {updatingEstado ? (
+                    <span className="flex items-center">
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Guardando...
+                    </span>
+                  ) : (
+                    'Guardar Cambios'
+                  )}
                 </button>
               </div>
             </div>

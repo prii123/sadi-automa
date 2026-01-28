@@ -409,6 +409,117 @@ export class GoogleCalendarService {
   }
 
   /**
+   * Actualizar un evento existente en Google Calendar
+   */
+  async updateEvent(calendarioId: number, eventData: {
+    summary?: string;
+    description?: string;
+    startDate?: string;
+    endDate?: string;
+    reminders?: { minutes: number }[];
+    attendees?: string[];
+    colorId?: string;
+  }) {
+    try {
+      // Asegurar que el cliente de calendar esté inicializado
+      this.ensureCalendarInitialized();
+
+      // Asegurar que los tokens sean válidos
+      const tokenCheck = await this.ensureValidTokens();
+      if (!tokenCheck.valid) {
+        return {
+          success: false,
+          error: 'Tokens de autenticación inválidos o expirados.',
+          authRequired: tokenCheck.authRequired,
+          authUrl: tokenCheck.authUrl
+        };
+      }
+
+      // Obtener el eventId de Google Calendar desde la BD local
+      const eventResult = await query('SELECT google_event_id FROM calendario_tributario WHERE id = $1', [calendarioId]);
+      if (eventResult.rows.length === 0 || !eventResult.rows[0].google_event_id) {
+        return {
+          success: false,
+          error: 'Evento no encontrado o no sincronizado con Google Calendar'
+        };
+      }
+
+      const eventId = eventResult.rows[0].google_event_id;
+
+      // Obtener el evento actual de Google Calendar para actualizarlo
+      const currentEvent = await this.calendar.events.get({
+        calendarId: this.calendarId,
+        eventId: eventId,
+      });
+
+      // Preparar los campos a actualizar
+      const updateData: any = {};
+
+      if (eventData.summary) updateData.summary = eventData.summary;
+      if (eventData.description) updateData.description = eventData.description;
+
+      if (eventData.startDate) {
+        updateData.start = {
+          dateTime: new Date(eventData.startDate + 'T00:00:00-05:00').toISOString(),
+          timeZone: 'America/Bogota',
+        };
+        updateData.end = {
+          dateTime: new Date(eventData.startDate + 'T23:59:59-05:00').toISOString(),
+          timeZone: 'America/Bogota',
+        };
+      }
+
+      if (eventData.reminders) {
+        updateData.reminders = {
+          useDefault: false,
+          overrides: eventData.reminders,
+        };
+      }
+
+      if (eventData.colorId) updateData.colorId = eventData.colorId;
+
+      // Agregar invitados si se proporcionan
+      if (eventData.attendees) {
+        updateData.attendees = eventData.attendees.map(email => ({ email }));
+      }
+
+      console.log('🔄 Actualizando evento en Google Calendar:', updateData);
+
+      const response = await this.calendar.events.update({
+        calendarId: this.calendarId,
+        eventId: eventId,
+        resource: updateData,
+        sendNotifications: false, // No enviar notificaciones para actualizaciones
+      });
+
+      console.log('✅ Evento actualizado exitosamente en Google Calendar');
+      return {
+        success: true,
+        eventId: response.data.id,
+        htmlLink: response.data.htmlLink,
+        message: 'Evento actualizado exitosamente en Google Calendar'
+      };
+    } catch (error) {
+      console.error('❌ Error actualizando evento en Google Calendar:', error);
+
+      // Si es un error de autenticación, sugerir reautorización
+      if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' && (error.message.includes('invalid_grant') || error.message.includes('No refresh token is set') || error.message.includes('refresh token'))) {
+        return {
+          success: false,
+          error: 'Tokens expirados. Se requiere reautorización.',
+          authRequired: true,
+          authUrl: this.generateAuthUrl()
+        };
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Error desconocido',
+      };
+    }
+  }
+
+  /**
    * Eliminar un evento de Google Calendar usando la API
    */
   async deleteEvent(eventId: string) {

@@ -492,6 +492,58 @@ export default function CalendarioTributarioComponent({
       const data = await response.json();
       if (data.success) {
         await loadCalendario();
+
+        // Actualizar el evento en Google Calendar de manera asíncrona (no bloqueante)
+        const item = calendario.find(item => item.id === calendarioId);
+        if (item && item.google_event_id) {
+          // Mapear estado a color hexadecimal
+          const getEstadoHexColor = (estado: string) => {
+            switch (estado) {
+              case 'pagado': return '#10b981'; // Verde
+              case 'pendiente': return '#f59e0b'; // Amarillo
+              case 'vencido': return '#ef4444'; // Rojo
+              case 'extemporaneo': return '#f97316'; // Naranja
+              default: return '#6b7280'; // Gris
+            }
+          };
+
+          const colorId = mapHexToGoogleColorId(getEstadoHexColor(nuevoEstado));
+
+          // Actualizar el evento en Google Calendar sin bloquear la UI
+          fetch('/api/google-calendar/events/update', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              calendarioId: calendarioId,
+              colorId: colorId,
+              summary: `${item.impuesto_nombre} - ${nuevoEstado.toUpperCase()}`
+            })
+          }).then(async (response) => {
+            if (!response.ok) {
+              // Si es error de autenticación, mostrar mensaje
+              if (response.status === 401) {
+                const errorData = await response.json();
+                if (errorData.authRequired && errorData.authUrl) {
+                  setGoogleCalendarAuthUrl(errorData.authUrl);
+                  setShowGoogleAuth(true);
+                  setOauthMessage({ type: 'error', message: 'Se requiere reautorización de Google Calendar para actualizar el evento.' });
+                  return;
+                }
+              }
+              console.warn('⚠️ No se pudo actualizar el evento en Google Calendar:', response.status);
+              return;
+            }
+
+            const result = await response.json();
+            if (result.success) {
+              console.log('✅ Evento actualizado en Google Calendar:', result.message);
+            } else {
+              console.warn('⚠️ No se pudo actualizar el evento en Google Calendar:', result.error);
+            }
+          }).catch((error) => {
+            console.error('❌ Error actualizando evento en Google Calendar:', error);
+          });
+        }
       } else {
         alert('Error actualizando estado: ' + data.error);
       }
