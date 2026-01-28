@@ -48,6 +48,8 @@ export async function GET(
     const isAdmin = userRole === 'admin' || userRole === 'super_admin';
     const isSupport = userRole === 'soporte';
 
+    console.log('GET Messages - User role:', userRole, 'isAdmin:', isAdmin, 'userId:', userId, 'ticket.user_id:', ticket.user_id, 'ticket.asignado_a:', ticket.asignado_a);
+
     if (!isAdmin && !isSupport && ticket.user_id !== userId && ticket.asignado_a !== userId) {
       return NextResponse.json({ error: 'No tienes permisos para ver este ticket' }, { status: 403 });
     }
@@ -115,6 +117,8 @@ export async function POST(
     const userRole = userResult.rows[0].rol;
     const isAdmin = userRole === 'admin' || userRole === 'super_admin';
     const isSupport = userRole === 'soporte';
+
+    console.log('POST Messages - User role:', userRole, 'isAdmin:', isAdmin, 'userId:', userId, 'ticket.user_id:', ticket.user_id, 'ticket.asignado_a:', ticket.asignado_a);
 
     if (!isAdmin && !isSupport && ticket.user_id !== userId && ticket.asignado_a !== userId) {
       return NextResponse.json({ error: 'No tienes permisos para responder este ticket' }, { status: 403 });

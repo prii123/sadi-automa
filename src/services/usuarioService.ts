@@ -34,8 +34,10 @@ export class UsuarioService {
     const client = await pool.connect();
     try {
       const result = await client.query(`
-        SELECT id, username, nombre, email, role_id, activo, fecha_creacion, fecha_actualizacion, ultimo_acceso
-        FROM usuarios ORDER BY nombre
+        SELECT u.id, u.username, u.nombre, u.email, u.role_id, u.activo, u.fecha_creacion, u.fecha_actualizacion, u.ultimo_acceso, r.nombre as role
+        FROM usuarios u
+        LEFT JOIN roles r ON u.role_id = r.id
+        ORDER BY u.nombre
       `);
 
       return { success: true, data: result.rows };

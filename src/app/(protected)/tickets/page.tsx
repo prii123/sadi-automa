@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Ticket } from '../../../models/ticket';
 
 interface TicketTypes {
@@ -20,6 +21,7 @@ export default function TicketsPage() {
     estado_id: '',
     asignado_a: ''
   });
+  const router = useRouter();
 
   useEffect(() => {
     fetchUser();
@@ -129,15 +131,16 @@ export default function TicketsPage() {
           <p className="text-black">No hay tickets disponibles.</p>
         ) : (
           tickets.map(ticket => (
-            <div key={ticket.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+            <div 
+              key={ticket.id} 
+              className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => router.push(`/tickets/${ticket.id}`)}
+            >
               <div className="flex justify-between items-start">
                 <div className="flex-1">
-                  <Link
-                    href={`/tickets/${ticket.id}`}
-                    className="text-lg font-semibold text-black hover:underline"
-                  >
+                  <h3 className="text-lg font-semibold text-black hover:underline">
                     Ticket #{ticket.id}
-                  </Link>
+                  </h3>
                   <p className="text-black mt-1">{ticket.descripcion.substring(0, 100)}...</p>
                   <div className="flex gap-4 mt-2 text-sm text-black">
                     <span>Estado: {getEstadoNombre(ticket.estado_id!)}</span>
@@ -147,6 +150,9 @@ export default function TicketsPage() {
                 </div>
                 <div className="text-right text-sm text-black">
                   <p>{new Date(ticket.fecha_creacion).toLocaleDateString()}</p>
+                  {ticket.usuario_nombre && (
+                    <p>Creado por: {ticket.usuario_nombre}</p>
+                  )}
                   {ticket.asignado_nombre && (
                     <p>Asignado: {ticket.asignado_nombre}</p>
                   )}
