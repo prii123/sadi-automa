@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { CalendarioTributarioService } from '@/services/calendarioTributarioService';
 
@@ -26,6 +26,7 @@ export interface CalendarioItem {
   synced_to_google?: boolean;
   google_last_sync?: string;
   impuesto_color?: string;
+  digito?: string;
 }
 
 export interface Empresa {
@@ -59,8 +60,12 @@ export interface VencimientoImpuesto {
   impuesto_id: number;
   anio_fiscal: number;
   periodo?: string;
-  fecha_vencimiento: string;
   descripcion?: string;
+  depende_nit?: boolean;
+  tipo_dependencia_nit?: 'ultimo_digito' | 'dos_ultimos_digitos';
+  digito?: string;
+  fecha_vencimiento?: string;
+  fechas_por_digito?: Record<string, string>;
   created_at: string;
   updated_at: string;
 }
@@ -101,10 +106,47 @@ export default function CalendarioTributarioComponent({
   const [showGoogleAuth, setShowGoogleAuth] = useState(false);
   const [googleCalendarApiDisabled, setGoogleCalendarApiDisabled] = useState(false);
 
-  // Estados para operaciones masivas
-  const [syncingAllToGoogle, setSyncingAllToGoogle] = useState(false);
-  const [removingAllFromGoogle, setRemovingAllFromGoogle] = useState(false);
+  // Estado para envío de emails
   const [sendingEmails, setSendingEmails] = useState(false);
+
+  // Estados para controlar períodos expandidos por impuesto
+  const [expandedPeriods, setExpandedPeriods] = useState<Set<string>>(new Set());
+
+  // Función para alternar la expansión de un período
+  const togglePeriodExpansion = (impuestoKey: string, periodo: string) => {
+    const key = `${impuestoKey}-${periodo}`;
+    const newExpanded = new Set(expandedPeriods);
+    if (newExpanded.has(key)) {
+      newExpanded.delete(key);
+    } else {
+      newExpanded.add(key);
+    }
+    setExpandedPeriods(newExpanded);
+  };
+
+  // Función para agrupar calendario por impuesto y periodo
+  const groupCalendarioByImpuestoAndPeriod = (calendario: CalendarioItem[]) => {
+    const grouped: { [impuestoKey: string]: { [periodoKey: string]: CalendarioItem[] } } = {};
+    
+    calendario.forEach(item => {
+      const impuestoKey = `${item.impuesto_codigo} - ${item.impuesto_nombre}`;
+      const periodoKey = item.periodo || 'Anual';
+      
+      if (!grouped[impuestoKey]) {
+        grouped[impuestoKey] = {};
+      }
+      
+      if (!grouped[impuestoKey][periodoKey]) {
+        grouped[impuestoKey][periodoKey] = [];
+      }
+      
+      grouped[impuestoKey][periodoKey].push(item);
+    });
+
+    return grouped;
+  };
+
+  const groupedCalendario = groupCalendarioByImpuestoAndPeriod(calendario);
 
   // Estados para mensajes de OAuth
   const [oauthMessage, setOauthMessage] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -123,8 +165,12 @@ export default function CalendarioTributarioComponent({
     impuesto_id: 0,
     anio_fiscal: new Date().getFullYear(),
     periodo: '',
+    descripcion: '',
+    depende_nit: false,
+    tipo_dependencia_nit: 'ultimo_digito' as 'ultimo_digito' | 'dos_ultimos_digitos',
+    digito: '',
     fecha_vencimiento: '',
-    descripcion: ''
+    fechas_por_digito: {} as Record<string, string>
   });
 
   const router = useRouter();
@@ -161,19 +207,16 @@ export default function CalendarioTributarioComponent({
 
   useEffect(() => {
     const loadInitialData = async () => {
-      setDataLoading(true);
-      
-      try {
-        await Promise.all([loadEmpresas(), loadImpuestos(), loadVencimientos()]);
-      } catch (error) {
-        console.error('Error en carga inicial:', error);
-      }
-      
-      setDataLoading(false);
-
       const empresaId = searchParams.get('empresaId');
       if (empresaId) {
+        // Si hay empresaId en URL, cargar empresas para poder seleccionar la empresa
+        setDataLoading(true);
+        await loadEmpresas();
+        setDataLoading(false);
         setSelectedEmpresa(parseInt(empresaId));
+      } else {
+        // Si no hay empresaId, terminar la carga inicial
+        setDataLoading(false);
       }
 
       // Manejar parámetros de OAuth callback
@@ -206,16 +249,12 @@ export default function CalendarioTributarioComponent({
           setEmpresaSearchText(expectedText);
         }
       }
+      // Cargar calendario automáticamente si existe
+      loadCalendario();
     }
   }, [selectedEmpresa, empresas]);
 
-  // Efecto para cargar calendario cuando cambian empresa o año
-  useEffect(() => {
-    if (selectedEmpresa) {
-      loadCalendario();
-      loadEmpresaImpuestos(selectedEmpresa);
-    }
-  }, [selectedEmpresa, selectedYear]);
+  // El calendario solo se carga cuando el usuario lo genera explícitamente
 
   // Efecto para búsqueda predictiva de empresas
   useEffect(() => {
@@ -244,6 +283,18 @@ export default function CalendarioTributarioComponent({
       return () => clearTimeout(timer);
     }
   }, [oauthMessage]);
+
+  // Efecto para cargar datos cuando se abre el modal de asignar impuestos
+  useEffect(() => {
+    if (showAssignImpuestos && selectedEmpresa) {
+      // Cargar impuestos si no están cargados
+      if (impuestos.length === 0) {
+        loadImpuestos();
+      }
+      // Cargar impuestos asignados a la empresa
+      loadEmpresaImpuestos(selectedEmpresa);
+    }
+  }, [showAssignImpuestos, selectedEmpresa]);
 
   const loadEmpresas = async () => {
     try {
@@ -419,6 +470,18 @@ export default function CalendarioTributarioComponent({
 
     setGenerating(true);
     try {
+      // Cargar datos maestros si no están cargados
+      if (empresas.length === 0) {
+        await loadEmpresas();
+      }
+      if (impuestos.length === 0) {
+        await loadImpuestos();
+      }
+      if (vencimientos.length === 0) {
+        await loadVencimientos();
+      }
+
+      // Generar el calendario
       const response = await fetch('/api/calendario-tributario', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -428,6 +491,7 @@ export default function CalendarioTributarioComponent({
       const data = await response.json();
       if (data.success) {
         await loadCalendario();
+        await loadEmpresaImpuestos(selectedEmpresa);
         alert('Calendario tributario generado exitosamente');
       } else {
         alert('Error generando calendario: ' + data.error);
@@ -451,7 +515,14 @@ export default function CalendarioTributarioComponent({
     setShowEmpresaDropdown(false);
   };
 
-  const handleEmpresaSearchFocus = () => {
+  const handleEmpresaSearchFocus = async () => {
+    // Si no hay empresas cargadas, cargarlas para permitir búsqueda
+    if (empresas.length === 0) {
+      setDataLoading(true);
+      await loadEmpresas();
+      setDataLoading(false);
+    }
+
     if (empresaSearchText.trim() !== '' && empresaSearchResults.length > 0) {
       setShowEmpresaDropdown(true);
     }
@@ -478,7 +549,28 @@ export default function CalendarioTributarioComponent({
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-CO');
+    // Si la fecha incluye hora, usar directamente
+    if (dateString.includes('T')) {
+      return new Date(dateString).toLocaleDateString('es-CO');
+    }
+    // Si es solo fecha (YYYY-MM-DD), tratarla como fecha local para evitar problemas de zona horaria
+    const [year, month, day] = dateString.split('-').map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString('es-CO');
+  };
+
+  // Función helper para formatear fechas en templates de string
+  const formatDateForTemplate = (dateString: string) => {
+    return formatDate(dateString);
+  };
+
+  // Función helper para convertir fecha string a Date correctamente
+  const parseDate = (dateString: string) => {
+    // Si es solo fecha (YYYY-MM-DD), tratarla como fecha local
+    if (!dateString.includes('T')) {
+      const [year, month, day] = dateString.split('-').map(Number);
+      return new Date(year, month - 1, day);
+    }
+    return new Date(dateString);
   };
 
   const actualizarEstado = async (calendarioId: number, nuevoEstado: string) => {
@@ -586,10 +678,23 @@ export default function CalendarioTributarioComponent({
   const crearVencimiento = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const vencimientoData = {
-        ...newVencimiento,
-        periodo: newVencimiento.periodo.trim() === '' ? null : newVencimiento.periodo.trim()
+      let vencimientoData: any = {
+        impuesto_id: newVencimiento.impuesto_id,
+        anio_fiscal: newVencimiento.anio_fiscal,
+        periodo: newVencimiento.periodo.trim() === '' ? null : newVencimiento.periodo.trim(),
+        descripcion: newVencimiento.descripcion,
+        depende_nit: newVencimiento.depende_nit,
+        tipo_dependencia_nit: newVencimiento.depende_nit ? newVencimiento.tipo_dependencia_nit : null
       };
+
+      if (newVencimiento.depende_nit) {
+        // Si depende del NIT, enviar fechas_por_digito
+        vencimientoData.fechas_por_digito = newVencimiento.fechas_por_digito;
+      } else {
+        // Si no depende del NIT, enviar dígito específico y fecha
+        vencimientoData.digito = newVencimiento.digito;
+        vencimientoData.fecha_vencimiento = newVencimiento.fecha_vencimiento;
+      }
 
       const response = await fetch('/api/vencimientos-impuestos', {
         method: 'POST',
@@ -603,8 +708,12 @@ export default function CalendarioTributarioComponent({
           impuesto_id: 0,
           anio_fiscal: new Date().getFullYear(),
           periodo: '',
+          descripcion: '',
+          depende_nit: false,
+          tipo_dependencia_nit: 'ultimo_digito' as 'ultimo_digito' | 'dos_ultimos_digitos',
+          digito: '',
           fecha_vencimiento: '',
-          descripcion: ''
+          fechas_por_digito: {}
         });
         setShowCreateVencimiento(false);
         loadVencimientos();
@@ -659,7 +768,7 @@ export default function CalendarioTributarioComponent({
 Impuesto: ${evento.impuesto_nombre} (${evento.impuesto_codigo})
 Tipo: ${evento.tipo_impuesto}
 Periodo: ${evento.periodo}
-Fecha de vencimiento: ${new Date(evento.fecha_vencimiento).toLocaleDateString('es-CO')}
+Fecha de vencimiento: ${formatDateForTemplate(evento.fecha_vencimiento)}
 Estado: ${evento.estado}
 
 Generado automáticamente por SADI`;
@@ -754,7 +863,7 @@ Generado automáticamente por SADI`;
       return;
     }
 
-    setSyncingAllToGoogle(true);
+    setSyncingToGoogle(-1);
     try {
       const empresa = empresas.find(e => e.id === selectedEmpresa);
       const empresaNombre = empresa ? empresa.nombre : 'Empresa';
@@ -766,7 +875,7 @@ Generado automáticamente por SADI`;
 Impuesto: ${evento.impuesto_nombre} (${evento.impuesto_codigo})
 Tipo: ${evento.tipo_impuesto}
 Periodo: ${evento.periodo}
-Fecha de vencimiento: ${new Date(evento.fecha_vencimiento).toLocaleDateString('es-CO')}
+Fecha de vencimiento: ${formatDateForTemplate(evento.fecha_vencimiento)}
 Estado: ${evento.estado}
 
 Generado automáticamente por SADI`,
@@ -805,7 +914,7 @@ Generado automáticamente por SADI`,
       console.error('Error sincronizando todos los eventos:', error);
       alert('Error sincronizando eventos con Google Calendar');
     } finally {
-      setSyncingAllToGoogle(false);
+      setSyncingToGoogle(null);
     }
   };
 
@@ -822,7 +931,7 @@ Generado automáticamente por SADI`,
       return;
     }
 
-    setRemovingAllFromGoogle(true);
+    setRemovingFromGoogle(-1);
     try {
       const eventosIds = eventosSincronizados.map(evento => evento.id);
 
@@ -857,7 +966,7 @@ Generado automáticamente por SADI`,
       console.error('Error eliminando todos los eventos:', error);
       alert('Error eliminando eventos de Google Calendar');
     } finally {
-      setRemovingAllFromGoogle(false);
+      setRemovingFromGoogle(null);
     }
   };
 
@@ -866,7 +975,7 @@ Generado automáticamente por SADI`,
 
     const eventosPendientes = calendario.filter(item => 
       item.estado === 'pendiente' && 
-      new Date(item.fecha_vencimiento) >= new Date()
+      parseDate(item.fecha_vencimiento) >= new Date()
     );
 
     if (eventosPendientes.length === 0) {
@@ -1180,18 +1289,95 @@ Generado automáticamente por SADI`,
                     placeholder="Ej: 01, 02, Q1, B1"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Fecha de Vencimiento
-                  </label>
+                <div className="flex items-center">
                   <input
-                    type="date"
-                    required
-                    value={newVencimiento.fecha_vencimiento}
-                    onChange={(e) => setNewVencimiento({...newVencimiento, fecha_vencimiento: e.target.value})}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    type="checkbox"
+                    id="depende_nit"
+                    checked={newVencimiento.depende_nit}
+                    onChange={(e) => setNewVencimiento({...newVencimiento, depende_nit: e.target.checked})}
+                    className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
                   />
+                  <label htmlFor="depende_nit" className="ml-2 block text-sm text-gray-900">
+                    Depende del NIT
+                  </label>
                 </div>
+                {!newVencimiento.depende_nit ? (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Dígito del NIT
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={newVencimiento.digito}
+                        onChange={(e) => setNewVencimiento({...newVencimiento, digito: e.target.value})}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        placeholder="Ej: 1, 23, A"
+                        maxLength={2}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Fecha de Vencimiento
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={newVencimiento.fecha_vencimiento}
+                        onChange={(e) => setNewVencimiento({...newVencimiento, fecha_vencimiento: e.target.value})}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Tipo de Dependencia del NIT
+                      </label>
+                      <select
+                        required
+                        value={newVencimiento.tipo_dependencia_nit}
+                        onChange={(e) => setNewVencimiento({...newVencimiento, tipo_dependencia_nit: e.target.value as 'ultimo_digito' | 'dos_ultimos_digitos'})}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      >
+                        <option value="ultimo_digito">Último dígito</option>
+                        <option value="dos_ultimos_digitos">Dos últimos dígitos</option>
+                      </select>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Fechas por Dígito
+                      </label>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-60 overflow-y-auto border border-gray-300 rounded-md p-3">
+                        {(() => {
+                          const digitos = newVencimiento.tipo_dependencia_nit === 'ultimo_digito' 
+                            ? ['0','1','2','3','4','5','6','7','8','9']
+                            : Array.from({length: 100}, (_, i) => i.toString().padStart(2, '0'));
+                          
+                          return digitos.map(digito => (
+                            <div key={digito} className="flex items-center gap-2">
+                              <label className="text-sm font-medium min-w-[40px]">Dígito {digito}:</label>
+                              <input
+                                type="date"
+                                value={newVencimiento.fechas_por_digito[digito] || ''}
+                                onChange={(e) => setNewVencimiento({
+                                  ...newVencimiento, 
+                                  fechas_por_digito: {
+                                    ...newVencimiento.fechas_por_digito,
+                                    [digito]: e.target.value
+                                  }
+                                })}
+                                className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              />
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                    </div>
+                  </>
+                )}
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Descripción
@@ -1398,18 +1584,18 @@ Generado automáticamente por SADI`,
             <div className="bg-white rounded-lg shadow overflow-hidden">
               {/* Botones de operaciones masivas */}
               {calendario.length > 0 && (
-                <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className="text-sm font-medium text-gray-700">Operaciones masivas:</span>
-                    
+                <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-gray-600">Operaciones:</span>
+
                     <button
                       onClick={syncAllToGoogleCalendar}
-                      disabled={syncingAllToGoogle || !googleCalendarConnected || calendario.filter(item => !item.synced_to_google).length === 0}
-                      className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={syncingToGoogle !== null || !googleCalendarConnected || calendario.filter(item => !item.synced_to_google).length === 0}
+                      className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
-                      {syncingAllToGoogle ? (
+                      {syncingToGoogle !== null ? (
                         <>
-                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <svg className="w-3 h-3 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
@@ -1417,19 +1603,22 @@ Generado automáticamente por SADI`,
                         </>
                       ) : (
                         <>
-                          📅 Sincronizar Todos ({calendario.filter(item => !item.synced_to_google).length})
+                          <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3a1 1 0 011-1h6a1 1 0 011 1v4h3a2 2 0 012 2v1l-1 5-1 5a2 2 0 01-2 2H6a2 2 0 01-2-2l-1-5-1-5V9a2 2 0 012-2h3z"></path>
+                          </svg>
+                          Agendar ({calendario.filter(item => !item.synced_to_google).length})
                         </>
                       )}
                     </button>
 
                     <button
                       onClick={removeAllFromGoogleCalendar}
-                      disabled={removingAllFromGoogle || !googleCalendarConnected || calendario.filter(item => item.synced_to_google).length === 0}
-                      className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={removingFromGoogle !== null || !googleCalendarConnected || calendario.filter(item => item.synced_to_google).length === 0}
+                      className="inline-flex items-center px-2 py-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
-                      {removingAllFromGoogle ? (
+                      {removingFromGoogle !== null ? (
                         <>
-                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <svg className="w-3 h-3 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
@@ -1437,19 +1626,22 @@ Generado automáticamente por SADI`,
                         </>
                       ) : (
                         <>
-                          🗑️ Eliminar Todos ({calendario.filter(item => item.synced_to_google).length})
+                          <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                          </svg>
+                          Eliminar ({calendario.filter(item => item.synced_to_google).length})
                         </>
                       )}
                     </button>
 
                     <button
                       onClick={sendEmailNotifications}
-                      disabled={sendingEmails || calendario.filter(item => item.estado === 'pendiente' && new Date(item.fecha_vencimiento) >= new Date()).length === 0}
-                      className="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={sendingEmails || calendario.filter(item => item.estado === 'pendiente' && parseDate(item.fecha_vencimiento) >= new Date()).length === 0}
+                      className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded hover:bg-green-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                       {sendingEmails ? (
                         <>
-                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <svg className="w-3 h-3 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
@@ -1457,10 +1649,21 @@ Generado automáticamente por SADI`,
                         </>
                       ) : (
                         <>
-                          📧 Enviar Notificaciones ({calendario.filter(item => item.estado === 'pendiente' && new Date(item.fecha_vencimiento) >= new Date()).length})
+                          <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                          </svg>
+                          Notificar ({calendario.filter(item => item.estado === 'pendiente' && parseDate(item.fecha_vencimiento) >= new Date()).length})
                         </>
                       )}
                     </button>
+
+                    <div className="ml-auto flex items-center space-x-2 text-xs text-gray-500">
+                      <span>Total: {calendario.length}</span>
+                      <span>•</span>
+                      <span>Pendientes: {calendario.filter(item => item.estado === 'pendiente').length}</span>
+                      <span>•</span>
+                      <span>Vencidos: {calendario.filter(item => item.estado === 'vencido').length}</span>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1487,109 +1690,283 @@ Generado automáticamente por SADI`,
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
+                  <table className="min-w-full divide-y divide-gray-200 text-sm">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-8">
+                          {/* Espacio para el botón de expandir */}
+                        </th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Impuesto
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Periodo
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Fecha Vencimiento
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Estado
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Google Calendar
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Acciones
                         </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {calendario.map((item) => (
-                        <tr key={item.id}>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-900">{item.impuesto_nombre}</div>
-                            <div className="text-sm text-gray-500">{item.impuesto_codigo}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {item.periodo}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {formatDate(item.fecha_vencimiento)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <select
-                              value={item.estado}
-                              onChange={(e) => actualizarEstado(item.id, e.target.value)}
-                              className={`text-xs px-2 py-1 rounded-full border-0 font-semibold ${getEstadoColor(item.estado)}`}
-                            >
-                              <option value="pendiente">Pendiente</option>
-                              <option value="pagado">Pagado</option>
-                              <option value="vencido">Vencido</option>
-                              <option value="extemporaneo">Extemporáneo</option>
-                            </select>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            {item.synced_to_google ? (
-                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                                Sincronizado
-                              </span>
-                            ) : (
-                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
-                                No sincronizado
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <div className="flex space-x-2">
-                              {!item.synced_to_google ? (
-                                <button
-                                  onClick={() => syncToGoogleCalendar(item.id)}
-                                  disabled={syncingToGoogle === item.id || !googleCalendarConnected}
-                                  className="text-blue-600 hover:text-blue-900 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                  {syncingToGoogle === item.id ? 'Sincronizando...' : '📅 Agendar'}
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => removeFromGoogleCalendar(item.id)}
-                                  disabled={removingFromGoogle === item.id || !googleCalendarConnected}
-                                  className="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                  {removingFromGoogle === item.id ? 'Eliminando...' : '🗑️ Eliminar'}
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                      {Object.entries(groupedCalendario).map(([impuestoKey, periodos]) => {
+                        return Object.entries(periodos).map(([periodo, items]) => {
+                          const impuestoKeyWithPeriodo = `${impuestoKey}-${periodo}`;
+                          const isExpanded = expandedPeriods.has(impuestoKeyWithPeriodo);
+                          const hasMultipleItems = items.length > 1;
+                          const firstItem = items[0];
+                        
+                        // Calcular estadísticas del grupo
+                        const totalItems = items.length;
+                        const syncedCount = items.filter(item => item.synced_to_google).length;
+                        const pendingCount = items.filter(item => item.estado === 'pendiente').length;
+                        const vencidoCount = items.filter(item => item.estado === 'vencido').length;
+                        
+                          return (
+                            <React.Fragment key={impuestoKeyWithPeriodo}>
+                            {/* Fila principal del grupo */}
+                            <tr className="hover:bg-gray-50">
+                              <td className="px-3 py-2 whitespace-nowrap">
+                                {hasMultipleItems && (
+                                  <button
+                                    onClick={() => togglePeriodExpansion(impuestoKey, periodo)}
+                                    className="text-gray-500 hover:text-gray-700 focus:outline-none"
+                                  >
+                                    {isExpanded ? (
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7"></path>
+                                      </svg>
+                                    ) : (
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path>
+                                      </svg>
+                                    )}
+                                  </button>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap">
+                                <div className="text-sm font-medium text-gray-900">{firstItem.impuesto_nombre}</div>
+                                <div className="text-xs text-gray-500">{firstItem.impuesto_codigo}</div>
+                                {hasMultipleItems && (
+                                  <div className="text-xs text-blue-600 font-medium mt-1">
+                                    {totalItems} vencimientos
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 font-medium">
+                                {periodo}
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+                                {hasMultipleItems ? (
+                                  <div className="text-xs text-gray-500">
+                                    Múltiples fechas
+                                  </div>
+                                ) : (
+                                  <div className="font-medium">
+                                    {formatDate(firstItem.fecha_vencimiento)}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap">
+                                <div className="flex flex-col space-y-1">
+                                  {pendingCount > 0 && (
+                                    <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                                      {pendingCount} Pendientes
+                                    </span>
+                                  )}
+                                  {vencidoCount > 0 && (
+                                    <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                                      {vencidoCount} Vencidos
+                                    </span>
+                                  )}
+                                  {pendingCount === 0 && vencidoCount === 0 && (
+                                    <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                                      Al día
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap">
+                                <div className="flex items-center space-x-1">
+                                  <div className={`w-2 h-2 rounded-full ${syncedCount > 0 ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                                  <span className="text-xs text-gray-600">
+                                    {syncedCount}/{totalItems}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 whitespace-nowrap">
+                                <div className="flex space-x-1">
+                                  {syncedCount < totalItems && (
+                                    <button
+                                      onClick={() => {
+                                        const unsyncedItems = items.filter(item => !item.synced_to_google);
+                                        if (unsyncedItems.length > 0) {
+                                          syncToGoogleCalendar(unsyncedItems[0].id);
+                                        }
+                                      }}
+                                      disabled={syncingToGoogle !== null || !googleCalendarConnected}
+                                      className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                      title="Sincronizar con Google Calendar"
+                                    >
+                                      {syncingToGoogle === null ? (
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3a1 1 0 011-1h6a1 1 0 011 1v4h3a2 2 0 012 2v1l-1 5-1 5a2 2 0 01-2 2H6a2 2 0 01-2-2l-1-5-1-5V9a2 2 0 012-2h3z"></path>
+                                        </svg>
+                                      ) : (
+                                        <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                      )}
+                                    </button>
+                                  )}
+                                  {syncedCount > 0 && (
+                                    <button
+                                      onClick={() => {
+                                        const syncedItems = items.filter(item => item.synced_to_google);
+                                        if (syncedItems.length > 0) {
+                                          removeFromGoogleCalendar(syncedItems[0].id);
+                                        }
+                                      }}
+                                      disabled={removingFromGoogle !== null || !googleCalendarConnected}
+                                      className="inline-flex items-center px-2 py-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                      title="Eliminar de Google Calendar"
+                                    >
+                                      {removingFromGoogle === null ? (
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                        </svg>
+                                      ) : (
+                                        <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                      )}
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                            
+                              {/* Filas expandidas con detalles de dígitos */}
+                              {isExpanded && hasMultipleItems && items.map((item, index) => (
+                                <tr key={`${impuestoKeyWithPeriodo}-${item.id}`} className="bg-gray-50">
+                                <td className="px-3 py-2"></td>
+                                <td className="px-3 py-2 pl-8" colSpan={2}>
+                                  <div className="flex items-center space-x-3">
+                                    <div className="flex items-center space-x-2">
+                                      <span className="text-xs font-medium text-gray-500">Dígito:</span>
+                                      <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded bg-blue-100 text-blue-800">
+                                        {item.digito || 'N/A'}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <span className="text-xs font-medium text-gray-500">Vence:</span>
+                                      <span className="text-sm font-medium text-gray-900">
+                                        {formatDate(item.fecha_vencimiento)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2"></td>
+                                <td className="px-3 py-2">
+                                  <select
+                                    value={item.estado}
+                                    onChange={(e) => actualizarEstado(item.id, e.target.value)}
+                                    className={`text-xs px-2 py-1 rounded-full border-0 font-semibold ${getEstadoColor(item.estado)}`}
+                                  >
+                                    <option value="pendiente">Pendiente</option>
+                                    <option value="pagado">Pagado</option>
+                                    <option value="vencido">Vencido</option>
+                                    <option value="extemporaneo">Extemporáneo</option>
+                                  </select>
+                                </td>
+                                <td className="px-3 py-2">
+                                  {item.synced_to_google ? (
+                                    <div className="flex items-center space-x-1">
+                                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                      <span className="text-xs text-green-700 font-medium">Sí</span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center space-x-1">
+                                      <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                                      <span className="text-xs text-gray-600">No</span>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <div className="flex space-x-1">
+                                    {!item.synced_to_google ? (
+                                      <button
+                                        onClick={() => syncToGoogleCalendar(item.id)}
+                                        disabled={syncingToGoogle === item.id || !googleCalendarConnected}
+                                        className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        title="Sincronizar con Google Calendar"
+                                      >
+                                        {syncingToGoogle === item.id ? (
+                                          <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                          </svg>
+                                        ) : (
+                                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3a1 1 0 011-1h6a1 1 0 011 1v4h3a2 2 0 012 2v1l-1 5-1 5a2 2 0 01-2 2H6a2 2 0 01-2-2l-1-5-1-5V9a2 2 0 012-2h3z"></path>
+                                          </svg>
+                                        )}
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => removeFromGoogleCalendar(item.id)}
+                                        disabled={removingFromGoogle === item.id || !googleCalendarConnected}
+                                        className="inline-flex items-center px-2 py-1 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        title="Eliminar de Google Calendar"
+                                      >
+                                        {removingFromGoogle === item.id ? (
+                                          <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                          </svg>
+                                        ) : (
+                                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                          </svg>
+                                        )}
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </React.Fragment>
+                      )})})}
                     </tbody>
                   </table>
                 </div>
               )}
-            </div>
-          )}
 
-          {/* Información */}
-          <div className="mt-8 bg-blue-50 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-blue-900 mb-2">
-              ¿Cómo funciona?
-            </h3>
-            <ul className="text-blue-800 text-sm space-y-1">
-              <li>• Los vencimientos se calculan automáticamente basados en el NIT de la empresa</li>
-              <li>• La fecha exacta depende del último dígito del NIT y el tipo de impuesto</li>
-              <li>• Puedes generar calendarios para años futuros</li>
-              <li>• Actualiza el estado de los pagos según sea necesario</li>
-            </ul>
+              {/* Información */}
+              <div className="mt-8 bg-blue-50 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-blue-900 mb-2">
+                  ¿Cómo funciona?
+                </h3>
+                <ul className="text-blue-800 text-sm space-y-1">
+                  <li>• Los vencimientos se calculan automáticamente basados en el NIT de la empresa</li>
+                  <li>• La fecha exacta depende del último dígito del NIT y el tipo de impuesto</li>
+                  <li>• Puedes generar calendarios para años futuros</li>
+                  <li>• Actualiza el estado de los pagos según sea necesario</li>
+                </ul>
+              </div>
           </div>
-        </>
       )}
-    </div>
-  );
-}
+    </>
+  )}
+  </div> );
+};

@@ -8,12 +8,43 @@ export async function GET() {
       FROM vencimientos_impuestos vi
       JOIN impuestos i ON vi.impuesto_id = i.id
       WHERE vi.activo = true
-      ORDER BY vi.anio_fiscal DESC, vi.periodo ASC
+      ORDER BY vi.anio_fiscal DESC, vi.periodo ASC, vi.digito ASC
     `);
+
+    // Agrupar los vencimientos por impuesto_id, anio_fiscal y periodo
+    const vencimientosMap = new Map();
+
+    result.rows.forEach(row => {
+      const key = `${row.impuesto_id}-${row.anio_fiscal}-${row.periodo || 'null'}`;
+
+      if (!vencimientosMap.has(key)) {
+        vencimientosMap.set(key, {
+          id: row.id, // Usar el ID del primer registro como ID principal
+          impuesto_id: row.impuesto_id,
+          anio_fiscal: row.anio_fiscal,
+          periodo: row.periodo,
+          descripcion: row.descripcion,
+          depende_nit: row.depende_nit,
+          tipo_dependencia_nit: row.tipo_dependencia_nit,
+          impuesto_nombre: row.impuesto_nombre,
+          impuesto_codigo: row.impuesto_codigo,
+          fechas_por_digito: {},
+          created_at: row.created_at,
+          updated_at: row.updated_at
+        });
+      }
+
+      // Agregar el dígito y fecha al objeto fechas_por_digito
+      if (row.digito && row.fecha_vencimiento) {
+        vencimientosMap.get(key).fechas_por_digito[row.digito] = row.fecha_vencimiento;
+      }
+    });
+
+    const vencimientos = Array.from(vencimientosMap.values());
 
     return NextResponse.json({
       success: true,
-      vencimientos: result.rows
+      vencimientos: vencimientos
     });
   } catch (error) {
     console.error('Error obteniendo vencimientos:', error);
@@ -34,7 +65,9 @@ export async function POST(request: NextRequest) {
       descripcion,
       depende_nit,
       tipo_dependencia_nit,
-      fechas_por_digito
+      fechas_por_digito,
+      digito,
+      fecha_vencimiento
     } = body;
 
     // Validación básica
@@ -43,22 +76,6 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Los campos impuesto_id y anio_fiscal son requeridos' },
         { status: 400 }
       );
-    }
-
-    // Validación de campos de dependencia del NIT
-    if (depende_nit) {
-      if (!tipo_dependencia_nit || !fechas_por_digito) {
-        return NextResponse.json(
-          { success: false, error: 'Si depende_nit es true, tipo_dependencia_nit y fechas_por_digito son requeridos' },
-          { status: 400 }
-        );
-      }
-      if (!['ultimo_digito', 'dos_ultimos_digitos'].includes(tipo_dependencia_nit)) {
-        return NextResponse.json(
-          { success: false, error: 'tipo_dependencia_nit debe ser "ultimo_digito" o "dos_ultimos_digitos"' },
-          { status: 400 }
-        );
-      }
     }
 
     const client = await import('pg').then(pg => new pg.Client(process.env.DATABASE_URL));
@@ -78,43 +95,82 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verificar que no exista un vencimiento duplicado
-    const existing = await client.query(
-      'SELECT id FROM vencimientos_impuestos WHERE impuesto_id = $1 AND anio_fiscal = $2 AND periodo IS NOT DISTINCT FROM $3',
-      [impuesto_id, anio_fiscal, periodo || null]
-    );
+    // Si se proporciona fechas_por_digito, crear múltiples registros
+    if (fechas_por_digito && typeof fechas_por_digito === 'object') {
+      const createdVencimientos = [];
 
-    if (existing.rows.length > 0) {
+      for (const [digitoKey, fecha] of Object.entries(fechas_por_digito)) {
+        // Verificar que no exista un vencimiento duplicado para este dígito
+        const existing = await client.query(
+          'SELECT id FROM vencimientos_impuestos WHERE impuesto_id = $1 AND anio_fiscal = $2 AND periodo IS NOT DISTINCT FROM $3 AND digito = $4',
+          [impuesto_id, anio_fiscal, periodo || null, digitoKey]
+        );
+
+        if (existing.rows.length > 0) {
+          await client.end();
+          return NextResponse.json(
+            { success: false, error: `Ya existe un vencimiento para el dígito ${digitoKey}` },
+            { status: 400 }
+          );
+        }
+
+        // Crear el vencimiento para este dígito
+        const result = await client.query(
+          `INSERT INTO vencimientos_impuestos (impuesto_id, anio_fiscal, periodo, descripcion, depende_nit, tipo_dependencia_nit, digito, fecha_vencimiento)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           RETURNING *`,
+          [impuesto_id, anio_fiscal, periodo || null, descripcion, depende_nit || false, tipo_dependencia_nit, digitoKey, fecha]
+        );
+
+        createdVencimientos.push(result.rows[0]);
+      }
+
       await client.end();
-      return NextResponse.json(
-        { success: false, error: 'Ya existe un vencimiento para este impuesto, año y periodo' },
-        { status: 400 }
-      );
+      return NextResponse.json({
+        success: true,
+        message: `Se crearon ${createdVencimientos.length} vencimientos`,
+        vencimientos: createdVencimientos
+      });
     }
 
-    // Crear el vencimiento
-    const result = await client.query(
-      `INSERT INTO vencimientos_impuestos (impuesto_id, anio_fiscal, periodo, descripcion, depende_nit, tipo_dependencia_nit, fechas_por_digito)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-      [
-        impuesto_id,
-        anio_fiscal,
-        periodo || null,
-        descripcion || null,
-        depende_nit || false,
-        tipo_dependencia_nit || null,
-        fechas_por_digito ? JSON.stringify(fechas_por_digito) : null
-      ]
-    );
+    // Si se proporciona un dígito específico, crear un solo registro
+    if (digito && fecha_vencimiento) {
+      // Verificar que no exista un vencimiento duplicado
+      const existing = await client.query(
+        'SELECT id FROM vencimientos_impuestos WHERE impuesto_id = $1 AND anio_fiscal = $2 AND periodo IS NOT DISTINCT FROM $3 AND digito = $4',
+        [impuesto_id, anio_fiscal, periodo || null, digito]
+      );
 
+      if (existing.rows.length > 0) {
+        await client.end();
+        return NextResponse.json(
+          { success: false, error: 'Ya existe un vencimiento para este impuesto, año, periodo y dígito' },
+          { status: 400 }
+        );
+      }
+
+      // Crear el vencimiento
+      const result = await client.query(
+        `INSERT INTO vencimientos_impuestos (impuesto_id, anio_fiscal, periodo, descripcion, depende_nit, tipo_dependencia_nit, digito, fecha_vencimiento)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING *`,
+        [impuesto_id, anio_fiscal, periodo || null, descripcion, depende_nit || false, tipo_dependencia_nit, digito, fecha_vencimiento]
+      );
+
+      await client.end();
+      return NextResponse.json({
+        success: true,
+        vencimiento: result.rows[0],
+        message: 'Vencimiento creado exitosamente'
+      });
+    }
+
+    // Si no se proporciona ni fechas_por_digito ni dígito específico
     await client.end();
-
-    return NextResponse.json({
-      success: true,
-      vencimiento: result.rows[0],
-      message: 'Vencimiento creado exitosamente'
-    });
+    return NextResponse.json(
+      { success: false, error: 'Debe proporcionar fechas_por_digito o un dígito y fecha_vencimiento específicos' },
+      { status: 400 }
+    );
   } catch (error) {
     console.error('Error creando vencimiento:', error);
     return NextResponse.json(
@@ -127,40 +183,42 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
+    const impuesto_id = searchParams.get('impuesto_id');
+    const anio_fiscal = searchParams.get('anio_fiscal');
+    const periodo = searchParams.get('periodo');
 
-    if (!id) {
+    if (!impuesto_id || !anio_fiscal) {
       return NextResponse.json(
-        { success: false, error: 'ID del vencimiento es requerido' },
+        { success: false, error: 'impuesto_id y anio_fiscal son requeridos' },
         { status: 400 }
       );
     }
 
-    // Verificar que el vencimiento existe
+    // Verificar que existen vencimientos para estos criterios
     const existing = await query(
-      'SELECT id FROM vencimientos_impuestos WHERE id = $1',
-      [parseInt(id)]
+      'SELECT id FROM vencimientos_impuestos WHERE impuesto_id = $1 AND anio_fiscal = $2 AND periodo IS NOT DISTINCT FROM $3 AND activo = true',
+      [parseInt(impuesto_id), parseInt(anio_fiscal), periodo || null]
     );
 
     if (existing.rows.length === 0) {
       return NextResponse.json(
-        { success: false, error: 'Vencimiento no encontrado' },
+        { success: false, error: 'No se encontraron vencimientos para eliminar' },
         { status: 404 }
       );
     }
 
-    // Eliminar el vencimiento (soft delete - marcar como inactivo)
+    // Eliminar todos los vencimientos relacionados (soft delete - marcar como inactivos)
     await query(
-      'UPDATE vencimientos_impuestos SET activo = false WHERE id = $1',
-      [parseInt(id)]
+      'UPDATE vencimientos_impuestos SET activo = false WHERE impuesto_id = $1 AND anio_fiscal = $2 AND periodo IS NOT DISTINCT FROM $3',
+      [parseInt(impuesto_id), parseInt(anio_fiscal), periodo || null]
     );
 
     return NextResponse.json({
       success: true,
-      message: 'Vencimiento eliminado exitosamente'
+      message: `Se eliminaron ${existing.rows.length} vencimientos exitosamente`
     });
   } catch (error) {
-    console.error('Error eliminando vencimiento:', error);
+    console.error('Error eliminando vencimientos:', error);
     return NextResponse.json(
       { success: false, error: 'Error interno del servidor' },
       { status: 500 }

@@ -14,6 +14,7 @@ interface VencimientoImpuesto {
   depende_nit?: boolean;
   tipo_dependencia_nit?: 'ultimo_digito' | 'dos_ultimos_digitos';
   fechas_por_digito?: Record<string, string>;
+  fecha_vencimiento?: string;
 }
 
 export default function ImpuestosPage() {
@@ -36,7 +37,7 @@ export default function ImpuestosPage() {
   const [selectedImpuestoFilter, setSelectedImpuestoFilter] = useState<number | null>(null);
 
   // Estados para expansión de vencimientos
-  const [expandedVencimientos, setExpandedVencimientos] = useState<Set<number>>(new Set());
+  const [expandedVencimientos, setExpandedVencimientos] = useState<Set<string>>(new Set());
 
   const router = useRouter();
 
@@ -56,7 +57,7 @@ export default function ImpuestosPage() {
   ];
 
   // Función para toggle expansión de vencimiento
-  const toggleVencimientoExpansion = (vencimientoId: number) => {
+  const toggleVencimientoExpansion = (vencimientoId: string) => {
     setExpandedVencimientos(prev => {
       const newSet = new Set(prev);
       if (newSet.has(vencimientoId)) {
@@ -194,6 +195,21 @@ export default function ImpuestosPage() {
       console.error('Error cargando vencimientos:', error);
       setVencimientos([]);
     }
+  };
+
+  // Función para filtrar impuestos por año y filtro seleccionado
+  const getImpuestosFiltrados = () => {
+    return impuestos.filter(impuesto => {
+      // Filtrar por año seleccionado
+      const tieneVencimientosEnAnio = vencimientos.some(v => 
+        v.impuesto_id === impuesto.id && v.anio_fiscal === selectedYear
+      );
+      
+      // Filtrar por impuesto específico si hay filtro aplicado
+      const cumpleFiltroImpuesto = !selectedImpuestoFilter || impuesto.id === selectedImpuestoFilter;
+      
+      return tieneVencimientosEnAnio && cumpleFiltroImpuesto;
+    });
   };
 
   const crearImpuesto = async (e: React.FormEvent) => {
@@ -490,14 +506,19 @@ export default function ImpuestosPage() {
     );
   };
 
-  // Función para obtener impuestos filtrados
-  const getImpuestosFiltrados = () => {
-    if (!selectedImpuestoFilter) {
-      return impuestos.filter(impuesto => impuesto.activo);
-    }
-    return impuestos.filter(impuesto =>
-      impuesto.activo && impuesto.id === selectedImpuestoFilter
-    );
+  // Función para agrupar vencimientos por período
+  const groupVencimientosByPeriodo = (vencimientos: VencimientoImpuesto[]) => {
+    const grouped: { [periodoKey: string]: VencimientoImpuesto[] } = {};
+    
+    vencimientos.forEach(vencimiento => {
+      const periodoKey = vencimiento.periodo || 'Anual';
+      if (!grouped[periodoKey]) {
+        grouped[periodoKey] = [];
+      }
+      grouped[periodoKey].push(vencimiento);
+    });
+
+    return grouped;
   };
 
   const getTipoColor = (tipo: string) => {
@@ -519,11 +540,32 @@ export default function ImpuestosPage() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    // Parsear la fecha manualmente para evitar problemas de zona horaria
-    const [year, month, day] = dateString.split('-').map(Number);
-    const date = new Date(year, month - 1, day); // month - 1 porque Date usa 0-based
-    return date.toLocaleDateString('es-CO');
+  const formatDate = (dateString: string | undefined | null) => {
+    console.log('formatDate recibió:', dateString, typeof dateString);
+
+    if (!dateString || dateString === 'Invalid Date') return 'Fecha inválida';
+
+    try {
+      // Si ya es una fecha válida, formatearla directamente
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        // Si no es una fecha válida, intentar parsear formato YYYY-MM-DD
+        const parts = dateString.split('-');
+        if (parts.length === 3) {
+          const [year, month, day] = parts.map(Number);
+          const parsedDate = new Date(year, month - 1, day);
+          if (!isNaN(parsedDate.getTime())) {
+            return parsedDate.toLocaleDateString('es-CO');
+          }
+        }
+        return 'Fecha inválida';
+      }
+
+      return date.toLocaleDateString('es-CO');
+    } catch (error) {
+      console.error('Error formateando fecha:', dateString, error);
+      return 'Fecha inválida';
+    }
   };
 
   if (loading) {
@@ -1270,15 +1312,15 @@ export default function ImpuestosPage() {
                   </div>
 
                   {vencimientosImpuesto.length > 0 ? (
-                    <div className="space-y-3">
-                      {vencimientosImpuesto.map((vencimiento) => {
-                        const isExpanded = expandedVencimientos.has(vencimiento.id);
+                    <div className="space-y-4">
+                      {Object.entries(groupVencimientosByPeriodo(vencimientosImpuesto)).map(([periodo, vencimientosPeriodo]) => {
+                        const isExpanded = expandedVencimientos.has(`periodo-${impuesto.id}-${periodo}`);
                         return (
-                          <div key={vencimiento.id} className="border border-gray-200 rounded-md overflow-hidden">
-                            {/* Header del vencimiento - clickeable */}
+                          <div key={periodo} className="border border-gray-200 rounded-md overflow-hidden">
+                            {/* Header del período - clickeable */}
                             <div 
-                              className="flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 cursor-pointer"
-                              onClick={() => toggleVencimientoExpansion(vencimiento.id)}
+                              className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 cursor-pointer"
+                              onClick={() => toggleVencimientoExpansion(`periodo-${impuesto.id}-${periodo}`)}
                             >
                               <div className="flex items-center space-x-4 flex-1">
                                 <div className="flex items-center space-x-2">
@@ -1286,58 +1328,78 @@ export default function ImpuestosPage() {
                                     ▶
                                   </span>
                                   <div className="text-sm font-medium text-black">
-                                    {vencimiento.anio_fiscal}
-                                    {vencimiento.periodo && ` - ${vencimiento.periodo}`}
+                                    {periodo === 'Anual' ? 'Anual' : `Período ${periodo}`}
                                   </div>
                                 </div>
-                                <div className="text-sm text-black">
-                                  {vencimiento.depende_nit ? (
-                                    <span className="text-purple-600 font-medium">
-                                      {vencimiento.tipo_dependencia_nit === 'ultimo_digito' ? 'Por último dígito' : 'Por dos últimos dígitos'}
-                                    </span>
-                                  ) : (
-                                    <span className="text-gray-500">Sin dependencia NIT</span>
-                                  )}
+                                <div className="text-sm text-gray-600">
+                                  {vencimientosPeriodo.length} vencimiento{vencimientosPeriodo.length !== 1 ? 's' : ''}
                                 </div>
                               </div>
                               <div className="flex items-center space-x-2">
-                                {vencimiento.descripcion && (
-                                  <div className="text-sm text-gray-500 max-w-md truncate">
-                                    {vencimiento.descripcion}
-                                  </div>
-                                )}
+                                <div className="text-sm text-gray-500">
+                                  {selectedYear}
+                                </div>
                               </div>
                             </div>
 
-                            {/* Detalles expandidos */}
-                            {isExpanded && vencimiento.depende_nit && vencimiento.fechas_por_digito && (
+                            {/* Detalles expandidos - dígitos y fechas */}
+                            {isExpanded && (
                               <div className="p-4 bg-white border-t border-gray-200">
-                                <h5 className="text-sm font-medium text-black mb-3">
-                                  Fechas de vencimiento por {vencimiento.tipo_dependencia_nit === 'ultimo_digito' ? 'último dígito' : 'dos últimos dígitos'} del NIT:
-                                </h5>
-                                <div className={`grid gap-2 ${
-                                  vencimiento.tipo_dependencia_nit === 'ultimo_digito' 
-                                    ? 'grid-cols-2 md:grid-cols-5' 
-                                    : 'grid-cols-2 md:grid-cols-4 lg:grid-cols-6'
-                                }`}>
-                                  {Object.entries(vencimiento.fechas_por_digito)
-                                    .sort(([a], [b]) => {
-                                      if (vencimiento.tipo_dependencia_nit === 'ultimo_digito') {
-                                        return parseInt(a) - parseInt(b);
-                                      } else {
-                                        return a.localeCompare(b);
-                                      }
-                                    })
-                                    .map(([digito, fecha]) => (
-                                      <div key={digito} className="flex items-center justify-between p-2 bg-gray-50 rounded text-xs">
-                                        <span className="font-medium text-black">
-                                          {vencimiento.tipo_dependencia_nit === 'ultimo_digito' ? `Dígito ${digito}` : `Dígitos ${digito}`}
-                                        </span>
-                                        <span className="text-gray-600">
-                                          {formatDate(fecha)}
-                                        </span>
+                                <div className="space-y-4">
+                                  {vencimientosPeriodo.map((vencimiento) => (
+                                    <div key={vencimiento.id} className="border border-gray-100 rounded-md p-3 bg-gray-50">
+                                      <div className="flex items-center justify-between mb-3">
+                                        <h6 className="text-sm font-medium text-black">
+                                          {vencimiento.descripcion || `Vencimiento ${vencimiento.id}`}
+                                        </h6>
+                                        <div className="text-xs text-gray-500">
+                                          {vencimiento.depende_nit ? (
+                                            <span className="text-purple-600">
+                                              {vencimiento.tipo_dependencia_nit === 'ultimo_digito' ? 'Por último dígito' : 'Por dos últimos dígitos'}
+                                            </span>
+                                          ) : (
+                                            <span>Sin dependencia NIT</span>
+                                          )}
+                                        </div>
                                       </div>
-                                    ))}
+
+                                      {vencimiento.depende_nit && vencimiento.fechas_por_digito ? (
+                                        <div>
+                                          <h6 className="text-xs font-medium text-gray-700 mb-2">
+                                            Fechas de vencimiento por {vencimiento.tipo_dependencia_nit === 'ultimo_digito' ? 'último dígito' : 'dos últimos dígitos'} del NIT:
+                                          </h6>
+                                          <div className={`grid gap-2 ${
+                                            vencimiento.tipo_dependencia_nit === 'ultimo_digito' 
+                                              ? 'grid-cols-2 md:grid-cols-5' 
+                                              : 'grid-cols-2 md:grid-cols-4 lg:grid-cols-6'
+                                          }`}>
+                                            {Object.entries(vencimiento.fechas_por_digito)
+                                              .sort(([a], [b]) => {
+                                                if (vencimiento.tipo_dependencia_nit === 'ultimo_digito') {
+                                                  return parseInt(a) - parseInt(b);
+                                                } else {
+                                                  return a.localeCompare(b);
+                                                }
+                                              })
+                                              .map(([digito, fecha]) => (
+                                                <div key={digito} className="flex items-center justify-between p-2 bg-white rounded text-xs border">
+                                                  <span className="font-medium text-black">
+                                                    {vencimiento.tipo_dependencia_nit === 'ultimo_digito' ? `Dígito ${digito}` : `Dígitos ${digito}`}
+                                                  </span>
+                                                  <span className="text-gray-600 font-medium">
+                                                    {formatDate(fecha)}
+                                                  </span>
+                                                </div>
+                                              ))}
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="text-xs text-gray-600">
+                                          Fecha de vencimiento: {vencimiento.fecha_vencimiento ? formatDate(vencimiento.fecha_vencimiento) : 'No especificada'}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
                                 </div>
                               </div>
                             )}

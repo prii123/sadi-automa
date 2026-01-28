@@ -174,9 +174,11 @@ async function createAllTables() {
         activo BOOLEAN DEFAULT true,
         depende_nit BOOLEAN DEFAULT false,
         tipo_dependencia_nit VARCHAR(50) CHECK (tipo_dependencia_nit IN ('ultimo_digito', 'dos_ultimos_digitos')),
-        fechas_por_digito JSONB,
+        digito VARCHAR(2), // Para ultimo_digito: '0'-'9', para dos_ultimos_digitos: '00'-'99'
+        fecha_vencimiento DATE NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(impuesto_id, anio_fiscal, periodo, digito)
       )
     `);
 

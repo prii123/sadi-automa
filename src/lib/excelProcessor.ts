@@ -12,13 +12,14 @@ export interface Impuesto {
 }
 
 export interface ProcessedExcelData {
-  impuesto_codigo: string;
+  impuesto_id: number;
   anio_fiscal: number;
-  descripcion_base: string;
-  depende_nit_parsed: boolean;
+  periodo: string | null;
+  descripcion: string;
+  depende_nit: boolean;
   tipo_dependencia_nit: string;
-  fechas_por_periodo_parsed: Record<string, Record<string, string>>;
-  periodos_parsed: any[];
+  digito: string;
+  fecha_vencimiento: string;
 }
 
 export const processExcelFile = async (file: File): Promise<any[]> => {
@@ -66,24 +67,17 @@ export const processExcelFile = async (file: File): Promise<any[]> => {
 
 export const processDataFromLines = (rows: any[], impuestos: Impuesto[]): { errors: string[], validData: ProcessedExcelData[] } => {
   const errors: string[] = [];
-  const groupedData: Record<string, any> = {}; // Agrupar por impuesto_codigo + anio_fiscal
+  const validData: ProcessedExcelData[] = [];
 
-//   console.log('Total rows received:', rows.length);
-//   console.log('First few rows:', rows.slice(0, 3));
-
-  // Procesar datos fila por fila (cada fila es un objeto)
+  // Procesar datos fila por fila - cada fila del Excel se convierte en una fila de vencimiento
   for (let i = 0; i < rows.length; i++) {
     const rawRow = rows[i];
-    // console.log(`Checking row ${i} (Excel row ${i+1}):`, rawRow);
 
     if (!rawRow || Object.values(rawRow).every(v => !v)) {
-      // console.log(`Skipping empty row ${i}`);
       continue;
     }
 
-    // console.log(`Processing row ${i} (Excel row ${i+1}):`, rawRow);
-
-    const row: any = { rowNumber: i + 1 };
+    const row: any = { rowNumber: i + 2 }; // +2 porque las filas empiezan en 1 y hay headers
 
     // Normalizar las keys del row
     const normalizedRow: any = {};
@@ -97,25 +91,23 @@ export const processDataFromLines = (rows: any[], impuestos: Impuesto[]): { erro
       row[key] = normalizedRow[key];
     }
 
-    // console.log(`Normalized row ${i}:`, row);
-
     const rowErrors: string[] = [];
 
     // Validaciones básicas
-    if (!row.impuesto_codigo || row.impuesto_codigo.trim() === '') rowErrors.push('impuesto_codigo es requerido');
-    if (!row.anio_fiscal || isNaN(parseInt(row.anio_fiscal))) rowErrors.push('anio_fiscal debe ser un número válido');
-    if (!row.fecha_vencimiento || row.fecha_vencimiento.trim() === '') rowErrors.push('fecha_vencimiento es requerido');
-    if (row.digito === undefined || row.digito === null || row.digito.toString().trim() === '') rowErrors.push('digito es requerido');
+    if (!row.impuesto_codigo || row.impuesto_codigo.trim() === '') {
+      rowErrors.push('impuesto_codigo es requerido');
+    }
+    if (!row.anio_fiscal || isNaN(parseInt(row.anio_fiscal))) {
+      rowErrors.push('anio_fiscal debe ser un número válido');
+    }
+    if (!row.fecha_vencimiento || row.fecha_vencimiento.trim() === '') {
+      rowErrors.push('fecha_vencimiento es requerido');
+    }
+    if (row.digito === undefined || row.digito === null || row.digito.toString().trim() === '') {
+      rowErrors.push('digito es requerido');
+    }
 
-    // console.log(`Row ${i} values - digito: "${row.digito}", periodo: "${row.periodo}", fecha: "${row.fecha_vencimiento}"`);
-
-    // Validaciones básicas
-    if (!row.impuesto_codigo || row.impuesto_codigo.trim() === '') rowErrors.push('impuesto_codigo es requerido');
-    if (!row.anio_fiscal || isNaN(parseInt(row.anio_fiscal))) rowErrors.push('anio_fiscal debe ser un número válido');
-    if (!row.fecha_vencimiento || row.fecha_vencimiento.trim() === '') rowErrors.push('fecha_vencimiento es requerido');
-    if (row.digito === undefined || row.digito === null || row.digito.toString().trim() === '') rowErrors.push('digito es requerido');
-
-    // Validar formato de fecha (acepta tanto YYYY-MM-DD como dd/mm/yyyy)
+    // Validar formato de fecha
     if (row.fecha_vencimiento) {
       const fechaLimpia = row.fecha_vencimiento.toString().trim();
       let fechaParsed = null;
@@ -124,10 +116,9 @@ export const processDataFromLines = (rows: any[], impuestos: Impuesto[]): { erro
       if (/^\d{4}-\d{2}-\d{2}$/.test(fechaLimpia)) {
         fechaParsed = fechaLimpia;
       }
-      // Intentar parsear como dd/mm/yyyy (permitiendo 1 o 2 dígitos para día y mes)
+      // Intentar parsear como dd/mm/yyyy
       else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(fechaLimpia)) {
         const [dia, mes, anio] = fechaLimpia.split('/');
-        // Convertir a YYYY-MM-DD con padding
         fechaParsed = `${anio}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
       }
       else {
@@ -140,7 +131,6 @@ export const processDataFromLines = (rows: any[], impuestos: Impuesto[]): { erro
         if (isNaN(fechaObj.getTime())) {
           rowErrors.push('fecha_vencimiento no es una fecha válida');
         } else {
-          // Guardar la fecha en formato YYYY-MM-DD
           row.fecha_vencimiento = fechaParsed;
         }
       }
@@ -154,7 +144,6 @@ export const processDataFromLines = (rows: any[], impuestos: Impuesto[]): { erro
 
     // Procesar dependencia NIT
     const dependeNit = row.depende_nit?.toString().toLowerCase().trim() === 'true';
-    let digitoKey = '';
     if (!dependeNit) {
       rowErrors.push('Actualmente solo se soportan vencimientos que dependen del NIT');
     }
@@ -178,116 +167,29 @@ export const processDataFromLines = (rows: any[], impuestos: Impuesto[]): { erro
         }
       }
 
-      // Normalizar digitoKey para agrupamiento
+      // Normalizar digito para consistencia
       if (row.tipo_dependencia_nit === 'dos_ultimos_digitos') {
-        digitoKey = digitoStr.padStart(2, '0');
-        row.digito = digitoKey; // Asegurar formato consistente
+        row.digito = digitoStr.padStart(2, '0');
       } else {
-        digitoKey = digitoStr.replace(/^0+/, '') || '0';
+        row.digito = digitoStr;
       }
     }
 
-    // console.log(`Row ${i} - digitoKey: "${digitoKey}", periodo: "${row.periodo || 'anual'}"`);
-
     if (rowErrors.length > 0) {
-      // console.log(`Row ${i} has errors and will be skipped:`, rowErrors);
       errors.push(`Fila ${row.rowNumber}: ${rowErrors.join(', ')}`);
       continue;
     }
 
-    // Crear clave para agrupar
-    const groupKey = `${row.impuesto_codigo}_${row.anio_fiscal}`;
-
-    if (!groupedData[groupKey]) {
-      groupedData[groupKey] = {
-        impuesto_codigo: row.impuesto_codigo,
-        anio_fiscal: parseInt(row.anio_fiscal),
-        descripcion_base: row.descripcion.split(' - ')[0] || row.descripcion, // Extraer base de la descripción
-        depende_nit_parsed: dependeNit,
-        tipo_dependencia_nit: row.tipo_dependencia_nit,
-        periodos_data: {}
-      };
-    }
-
-    // Agregar datos del dígito para este período
-    const periodoKey = row.periodo || 'anual';
-    if (!groupedData[groupKey].periodos_data[periodoKey]) {
-      groupedData[groupKey].periodos_data[periodoKey] = {
-        descripcion: row.descripcion,
-        fechas_por_digito: {}
-      };
-    }
-
-    // Agregar la fecha para este dígito específico
-    const fechaFormateada = row.fecha_vencimiento;
-    
-    // Validar que la fecha esté en formato YYYY-MM-DD
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaFormateada)) {
-      errors.push(`Fila ${i + 1}: La fecha de vencimiento debe estar en formato YYYY-MM-DD, se encontró: ${fechaFormateada}`);
-      continue;
-    }
-    
-    groupedData[groupKey].periodos_data[periodoKey].fechas_por_digito[digitoKey] = fechaFormateada;
-
-    // console.log(`Added to group ${groupKey}, periodo ${periodoKey}, digito ${digitoKey}: ${row.fecha_vencimiento}`);
-  }
-
-  // console.log('Final groupedData:', groupedData);
-
-  // Convertir datos agrupados al formato esperado por la API
-  const validData: ProcessedExcelData[] = [];
-
-  for (const groupKey in groupedData) {
-    const group = groupedData[groupKey];
-    const impuesto = impuestos.find(imp => imp.codigo === group.impuesto_codigo);
-
-    if (!impuesto) continue;
-
-    // Obtener períodos esperados para este impuesto
-    const periodosEsperados = getPeriodosPorPeriodicidad(impuesto.periodicidad);
-
-    // Crear mapa de fechas por período
-    const fechasPorPeriodo: Record<string, Record<string, string>> = {};
-    const periodosParsed: any[] = [];
-
-    // Procesar cada período encontrado en los datos
-    for (const periodoKey in group.periodos_data) {
-      const periodoData = group.periodos_data[periodoKey];
-
-      // Verificar que tengamos fechas para todos los dígitos esperados
-      const digitosEsperados = group.tipo_dependencia_nit === 'ultimo_digito'
-        ? Array.from({ length: 10 }, (_, i) => i.toString())
-        : Array.from({ length: 100 }, (_, i) => i.toString().padStart(2, '0'));
-
-      const digitosFaltantes = digitosEsperados.filter(d => !periodoData.fechas_por_digito[d]);
-      if (digitosFaltantes.length > 0) {
-        errors.push(`Impuesto ${group.impuesto_codigo} año ${group.anio_fiscal}, período ${periodoKey}: faltan fechas para los dígitos: ${digitosFaltantes.join(', ')}`);
-        continue;
-      }
-
-      fechasPorPeriodo[periodoKey] = periodoData.fechas_por_digito;
-
-      // Agregar período a la lista
-      const periodoEsperado = periodosEsperados.find(p => p.periodo === periodoKey || (p.periodo === null && periodoKey === 'anual'));
-      if (periodoEsperado) {
-        periodosParsed.push(periodoEsperado);
-      }
-    }
-
-    // Verificar que todos los períodos esperados estén presentes
-    const periodosFaltantes = periodosEsperados.filter(p =>
-      !group.periodos_data[p.periodo || 'anual']
-    );
-
-    if (periodosFaltantes.length > 0) {
-      errors.push(`Impuesto ${group.impuesto_codigo} año ${group.anio_fiscal}: faltan los siguientes períodos: ${periodosFaltantes.map(p => p.nombre).join(', ')}`);
-      continue;
-    }
-
+    // Crear entrada válida - cada fila del Excel se convierte directamente en un vencimiento
     validData.push({
-      ...group,
-      fechas_por_periodo_parsed: fechasPorPeriodo,
-      periodos_parsed: periodosParsed
+      impuesto_id: impuesto!.id,
+      anio_fiscal: parseInt(row.anio_fiscal),
+      periodo: row.periodo || null,
+      descripcion: row.descripcion || `${impuesto!.nombre} - ${row.periodo || 'Anual'}`,
+      depende_nit: dependeNit,
+      tipo_dependencia_nit: row.tipo_dependencia_nit,
+      digito: row.digito,
+      fecha_vencimiento: row.fecha_vencimiento
     });
   }
 

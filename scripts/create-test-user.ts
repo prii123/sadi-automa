@@ -27,13 +27,12 @@ async function createTestUser() {
 
     // Crear el usuario de pruebas
     await client.query(`
-      INSERT INTO usuarios (username, password_hash, nombre, apellido, email, rol, role_id, activo, fecha_creacion)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+      INSERT INTO usuarios (username, password_hash, nombre, email, rol, role_id, activo, fecha_creacion)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
     `, [
       'prii123',
       hashedPassword,
-      'Usuario',
-      'Prueba',
+      'Usuario Prueba',
       'prii123@test.com',
       'super_admin',
       roleId,
