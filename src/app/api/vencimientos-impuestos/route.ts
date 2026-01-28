@@ -11,36 +11,23 @@ export async function GET() {
       ORDER BY vi.anio_fiscal DESC, vi.periodo ASC, vi.digito ASC
     `);
 
-    // Agrupar los vencimientos por impuesto_id, anio_fiscal y periodo
-    const vencimientosMap = new Map();
-
-    result.rows.forEach(row => {
-      const key = `${row.impuesto_id}-${row.anio_fiscal}-${row.periodo || 'null'}`;
-
-      if (!vencimientosMap.has(key)) {
-        vencimientosMap.set(key, {
-          id: row.id, // Usar el ID del primer registro como ID principal
-          impuesto_id: row.impuesto_id,
-          anio_fiscal: row.anio_fiscal,
-          periodo: row.periodo,
-          descripcion: row.descripcion,
-          depende_nit: row.depende_nit,
-          tipo_dependencia_nit: row.tipo_dependencia_nit,
-          impuesto_nombre: row.impuesto_nombre,
-          impuesto_codigo: row.impuesto_codigo,
-          fechas_por_digito: {},
-          created_at: row.created_at,
-          updated_at: row.updated_at
-        });
-      }
-
-      // Agregar el dígito y fecha al objeto fechas_por_digito
-      if (row.digito && row.fecha_vencimiento) {
-        vencimientosMap.get(key).fechas_por_digito[row.digito] = row.fecha_vencimiento;
-      }
-    });
-
-    const vencimientos = Array.from(vencimientosMap.values());
+    // Devolver los vencimientos individuales sin agrupar
+    const vencimientos = result.rows.map(row => ({
+      id: row.id,
+      impuesto_id: row.impuesto_id,
+      anio_fiscal: row.anio_fiscal,
+      periodo: row.periodo,
+      descripcion: row.descripcion,
+      activo: row.activo,
+      depende_nit: row.depende_nit,
+      tipo_dependencia_nit: row.tipo_dependencia_nit,
+      digito: row.digito,
+      fecha_vencimiento: row.fecha_vencimiento ? row.fecha_vencimiento.toISOString().split('T')[0] : undefined,
+      impuesto_nombre: row.impuesto_nombre,
+      impuesto_codigo: row.impuesto_codigo,
+      created_at: row.created_at,
+      updated_at: row.updated_at
+    }));
 
     return NextResponse.json({
       success: true,

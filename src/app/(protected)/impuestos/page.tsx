@@ -13,8 +13,13 @@ interface VencimientoImpuesto {
   activo: boolean;
   depende_nit?: boolean;
   tipo_dependencia_nit?: 'ultimo_digito' | 'dos_ultimos_digitos';
-  fechas_por_digito?: Record<string, string>;
+  digito?: string;
   fecha_vencimiento?: string;
+  fechas_por_digito?: Record<string, string>; // Mantener para compatibilidad
+  impuesto_nombre?: string;
+  impuesto_codigo?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export default function ImpuestosPage() {
@@ -1342,65 +1347,80 @@ export default function ImpuestosPage() {
                               </div>
                             </div>
 
-                            {/* Detalles expandidos - dígitos y fechas */}
+                            {/* Detalles expandidos - tabla de NIT y fechas */}
                             {isExpanded && (
                               <div className="p-4 bg-white border-t border-gray-200">
-                                <div className="space-y-4">
-                                  {vencimientosPeriodo.map((vencimiento) => (
-                                    <div key={vencimiento.id} className="border border-gray-100 rounded-md p-3 bg-gray-50">
-                                      <div className="flex items-center justify-between mb-3">
-                                        <h6 className="text-sm font-medium text-black">
-                                          {vencimiento.descripcion || `Vencimiento ${vencimiento.id}`}
-                                        </h6>
-                                        <div className="text-xs text-gray-500">
-                                          {vencimiento.depende_nit ? (
-                                            <span className="text-purple-600">
-                                              {vencimiento.tipo_dependencia_nit === 'ultimo_digito' ? 'Por último dígito' : 'Por dos últimos dígitos'}
-                                            </span>
-                                          ) : (
-                                            <span>Sin dependencia NIT</span>
-                                          )}
+                                {/* Agrupar vencimientos por dígito para mostrar tabla de NIT -> Fecha */}
+                                {(() => {
+                                  // Crear mapa de dígito -> fecha para este período
+                                  const digitoFechaMap: { [digito: string]: string } = {};
+                                  
+                                  vencimientosPeriodo.forEach(vencimiento => {
+                                    if (vencimiento.depende_nit && vencimiento.digito && vencimiento.fecha_vencimiento) {
+                                      const nitDisplay = vencimiento.tipo_dependencia_nit === 'dos_ultimos_digitos' 
+                                        ? `termina en ${vencimiento.digito}` 
+                                        : `termina en ${vencimiento.digito}`;
+                                      digitoFechaMap[nitDisplay] = formatDate(vencimiento.fecha_vencimiento);
+                                    } else if (!vencimiento.depende_nit && vencimiento.fecha_vencimiento) {
+                                      digitoFechaMap['Fecha fija'] = formatDate(vencimiento.fecha_vencimiento);
+                                    }
+                                  });
+
+                                  const descripcionVencimiento = vencimientosPeriodo[0]?.descripcion || `Vencimiento ${periodo}`;
+
+                                  return (
+                                    <div>
+                                      <div className="mb-3">
+                                        <h5 className="text-sm font-medium text-black mb-2">
+                                          {descripcionVencimiento}
+                                        </h5>
+                                        <div className="text-xs text-gray-600 mb-3">
+                                          Fechas de vencimiento por NIT para el período {periodo} - {selectedYear}
                                         </div>
                                       </div>
 
-                                      {vencimiento.depende_nit && vencimiento.fechas_por_digito ? (
-                                        <div>
-                                          <h6 className="text-xs font-medium text-gray-700 mb-2">
-                                            Fechas de vencimiento por {vencimiento.tipo_dependencia_nit === 'ultimo_digito' ? 'último dígito' : 'dos últimos dígitos'} del NIT:
-                                          </h6>
-                                          <div className={`grid gap-2 ${
-                                            vencimiento.tipo_dependencia_nit === 'ultimo_digito' 
-                                              ? 'grid-cols-2 md:grid-cols-5' 
-                                              : 'grid-cols-2 md:grid-cols-4 lg:grid-cols-6'
-                                          }`}>
-                                            {Object.entries(vencimiento.fechas_por_digito)
+                                      {/* Tabla de NIT -> Fecha */}
+                                      <div className="overflow-x-auto">
+                                        <table className="min-w-full border border-gray-300 text-xs">
+                                          <thead className="bg-gray-50">
+                                            <tr>
+                                              <th className="border border-gray-300 px-3 py-2 text-left text-xs font-medium text-gray-700">
+                                                NIT
+                                              </th>
+                                              <th className="border border-gray-300 px-3 py-2 text-left text-xs font-medium text-gray-700">
+                                                Fecha de Vencimiento
+                                              </th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="bg-white">
+                                            {Object.entries(digitoFechaMap)
                                               .sort(([a], [b]) => {
-                                                if (vencimiento.tipo_dependencia_nit === 'ultimo_digito') {
-                                                  return parseInt(a) - parseInt(b);
-                                                } else {
-                                                  return a.localeCompare(b);
-                                                }
+                                                if (a === 'Fecha fija') return -1;
+                                                if (b === 'Fecha fija') return 1;
+                                                return a.localeCompare(b);
                                               })
-                                              .map(([digito, fecha]) => (
-                                                <div key={digito} className="flex items-center justify-between p-2 bg-white rounded text-xs border">
-                                                  <span className="font-medium text-black">
-                                                    {vencimiento.tipo_dependencia_nit === 'ultimo_digito' ? `Dígito ${digito}` : `Dígitos ${digito}`}
-                                                  </span>
-                                                  <span className="text-gray-600 font-medium">
-                                                    {formatDate(fecha)}
-                                                  </span>
-                                                </div>
-                                              ))}
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        <div className="text-xs text-gray-600">
-                                          Fecha de vencimiento: {vencimiento.fecha_vencimiento ? formatDate(vencimiento.fecha_vencimiento) : 'No especificada'}
+                                              .map(([nit, fecha]) => (
+                                              <tr key={nit} className="hover:bg-gray-50">
+                                                <td className="border border-gray-300 px-3 py-2 text-black font-medium">
+                                                  {nit}
+                                                </td>
+                                                <td className="border border-gray-300 px-3 py-2 text-gray-600">
+                                                  {fecha}
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+
+                                      {Object.keys(digitoFechaMap).length === 0 && (
+                                        <div className="text-center py-4 text-gray-500 text-sm">
+                                          No hay fechas de vencimiento configuradas para este período
                                         </div>
                                       )}
                                     </div>
-                                  ))}
-                                </div>
+                                  );
+                                })()}
                               </div>
                             )}
                           </div>

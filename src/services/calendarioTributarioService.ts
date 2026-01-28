@@ -396,7 +396,9 @@ export class CalendarioTributarioService {
   async obtenerVencimientosImpuestos(): Promise<VencimientoImpuesto[]> {
     try {
       const result = await query(`
-        SELECT vi.*, i.nombre as impuesto_nombre, i.codigo as impuesto_codigo,
+        SELECT vi.id, vi.impuesto_id, vi.anio_fiscal, vi.periodo, vi.descripcion, vi.activo,
+               vi.depende_nit, vi.tipo_dependencia_nit, vi.digito, vi.fecha_vencimiento, vi.created_at, vi.updated_at,
+               i.nombre as impuesto_nombre, i.codigo as impuesto_codigo,
                i.tipo as tipo_impuesto, i.periodicidad
         FROM vencimientos_impuestos vi
         JOIN impuestos i ON vi.impuesto_id = i.id
@@ -415,7 +417,6 @@ export class CalendarioTributarioService {
         tipo_dependencia_nit: row.tipo_dependencia_nit,
         digito: row.digito,
         fecha_vencimiento: row.fecha_vencimiento ? row.fecha_vencimiento.toISOString().split('T')[0] : undefined,
-        fechas_por_digito: row.fechas_por_digito, // Mantener para compatibilidad temporal
         impuesto: {
           id: row.impuesto_id,
           nombre: row.impuesto_nombre,
@@ -500,10 +501,10 @@ export class CalendarioTributarioService {
 
       // Crear el vencimiento
       const result = await query(
-        `INSERT INTO vencimientos_impuestos (impuesto_id, anio_fiscal, periodo, descripcion, depende_nit, tipo_dependencia_nit, fechas_por_digito)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING *`,
-        [impuestoId, anioFiscal, periodo, descripcion, dependeNit || false, tipoDependenciaNit, fechasPorDigito ? JSON.stringify(fechasPorDigito) : null]
+        `INSERT INTO vencimientos_impuestos (impuesto_id, anio_fiscal, periodo, descripcion, depende_nit, tipo_dependencia_nit)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, impuesto_id, anio_fiscal, periodo, descripcion, activo, depende_nit, tipo_dependencia_nit, digito, fecha_vencimiento, created_at, updated_at`,
+        [impuestoId, anioFiscal, periodo, descripcion, dependeNit || false, tipoDependenciaNit]
       );
 
       return {
@@ -515,7 +516,8 @@ export class CalendarioTributarioService {
         activo: result.rows[0].activo,
         depende_nit: result.rows[0].depende_nit,
         tipo_dependencia_nit: result.rows[0].tipo_dependencia_nit,
-        fechas_por_digito: result.rows[0].fechas_por_digito
+        digito: result.rows[0].digito,
+        fecha_vencimiento: result.rows[0].fecha_vencimiento ? result.rows[0].fecha_vencimiento.toISOString().split('T')[0] : undefined
       };
     } catch (error) {
       console.error('❌ Error creando vencimiento:', error);
@@ -539,11 +541,10 @@ export class CalendarioTributarioService {
          SET descripcion = COALESCE($1, descripcion),
              depende_nit = COALESCE($2, depende_nit),
              tipo_dependencia_nit = COALESCE($3, tipo_dependencia_nit),
-             fechas_por_digito = COALESCE($4, fechas_por_digito),
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $5
-         RETURNING *`,
-        [descripcion, dependeNit, tipoDependenciaNit, fechasPorDigito ? JSON.stringify(fechasPorDigito) : null, id]
+         RETURNING id, impuesto_id, anio_fiscal, periodo, descripcion, activo, depende_nit, tipo_dependencia_nit, digito, fecha_vencimiento, created_at, updated_at`,
+        [descripcion, dependeNit, tipoDependenciaNit, id]
       );
 
       if (result.rows.length === 0) {
@@ -559,7 +560,8 @@ export class CalendarioTributarioService {
         activo: result.rows[0].activo,
         depende_nit: result.rows[0].depende_nit,
         tipo_dependencia_nit: result.rows[0].tipo_dependencia_nit,
-        fechas_por_digito: result.rows[0].fechas_por_digito
+        digito: result.rows[0].digito,
+        fecha_vencimiento: result.rows[0].fecha_vencimiento ? result.rows[0].fecha_vencimiento.toISOString().split('T')[0] : undefined
       };
     } catch (error) {
       console.error('❌ Error actualizando vencimiento:', error);
@@ -588,7 +590,9 @@ export class CalendarioTributarioService {
   async obtenerVencimientosPorImpuesto(impuestoId: number): Promise<VencimientoImpuesto[]> {
     try {
       const result = await query(`
-        SELECT vi.*, i.nombre as impuesto_nombre, i.codigo as impuesto_codigo,
+        SELECT vi.id, vi.impuesto_id, vi.anio_fiscal, vi.periodo, vi.descripcion, vi.activo,
+               vi.depende_nit, vi.tipo_dependencia_nit, vi.digito, vi.fecha_vencimiento, vi.created_at, vi.updated_at,
+               i.nombre as impuesto_nombre, i.codigo as impuesto_codigo,
                i.tipo as tipo_impuesto, i.periodicidad
         FROM vencimientos_impuestos vi
         JOIN impuestos i ON vi.impuesto_id = i.id
@@ -607,7 +611,6 @@ export class CalendarioTributarioService {
         tipo_dependencia_nit: row.tipo_dependencia_nit,
         digito: row.digito,
         fecha_vencimiento: row.fecha_vencimiento ? row.fecha_vencimiento.toISOString().split('T')[0] : undefined,
-        fechas_por_digito: row.fechas_por_digito, // Mantener para compatibilidad temporal
         impuesto: {
           id: row.impuesto_id,
           nombre: row.impuesto_nombre,
@@ -631,7 +634,7 @@ export class CalendarioTributarioService {
                i.nombre as impuesto_nombre, i.codigo as impuesto_codigo, i.color as impuesto_color,
                i.tipo as tipo_impuesto, i.periodicidad,
                vi.anio_fiscal, vi.periodo as periodo_impuesto, vi.descripcion as vencimiento_descripcion,
-               vi.fechas_por_digito
+               vi.digito, vi.fecha_vencimiento as vencimiento_base
         FROM calendario_tributario ct
         JOIN empresas e ON e.id = ct.empresa_id
         JOIN empresa_impuestos ei ON ei.empresa_id = ct.empresa_id AND ei.impuesto_id = ct.impuesto_id AND ei.activo = true
