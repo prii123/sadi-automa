@@ -43,17 +43,17 @@ export const processExcelFile = async (file: File): Promise<any[]> => {
       } else if (typeof cell === 'number' && cell > 40000 && cell < 80000) {
         // Convertir número serial de Excel a fecha
         const excelDate = new Date((cell - 25569) * 86400 * 1000); // 25569 es el offset de Excel
-        // Usar métodos UTC para evitar problemas de zona horaria
+        // Usar métodos UTC para evitar problemas de zona horaria y formatear como YYYY-MM-DD
         const dia = excelDate.getUTCDate().toString().padStart(2, '0');
         const mes = (excelDate.getUTCMonth() + 1).toString().padStart(2, '0');
         const anio = excelDate.getUTCFullYear();
-        processedRow[key] = `${dia}/${mes}/${anio}`;
+        processedRow[key] = `${anio}-${mes}-${dia}`; // Cambiar a formato YYYY-MM-DD
       } else if (cell instanceof Date) {
-        // Usar métodos UTC para evitar problemas de zona horaria
+        // Usar métodos UTC para evitar problemas de zona horaria y formatear como YYYY-MM-DD
         const dia = cell.getUTCDate().toString().padStart(2, '0');
         const mes = (cell.getUTCMonth() + 1).toString().padStart(2, '0');
         const anio = cell.getUTCFullYear();
-        processedRow[key] = `${dia}/${mes}/${anio}`;
+        processedRow[key] = `${anio}-${mes}-${dia}`; // Cambiar a formato YYYY-MM-DD
       } else {
         processedRow[key] = cell.toString();
       }
@@ -219,7 +219,15 @@ export const processDataFromLines = (rows: any[], impuestos: Impuesto[]): { erro
     }
 
     // Agregar la fecha para este dígito específico
-    groupedData[groupKey].periodos_data[periodoKey].fechas_por_digito[digitoKey] = row.fecha_vencimiento;
+    const fechaFormateada = row.fecha_vencimiento;
+    
+    // Validar que la fecha esté en formato YYYY-MM-DD
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaFormateada)) {
+      errors.push(`Fila ${i + 1}: La fecha de vencimiento debe estar en formato YYYY-MM-DD, se encontró: ${fechaFormateada}`);
+      continue;
+    }
+    
+    groupedData[groupKey].periodos_data[periodoKey].fechas_por_digito[digitoKey] = fechaFormateada;
 
     // console.log(`Added to group ${groupKey}, periodo ${periodoKey}, digito ${digitoKey}: ${row.fecha_vencimiento}`);
   }

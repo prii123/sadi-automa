@@ -59,6 +59,7 @@ async function createRolesAndModules() {
       { nombre: 'super_admin', descripcion: 'Super Administrador con acceso completo' },
       { nombre: 'admin', descripcion: 'Administrador del sistema' },
       { nombre: 'contador', descripcion: 'Contador con acceso a empresas asignadas' },
+      { nombre: 'soporte', descripcion: 'Equipo de soporte técnico' },
       { nombre: 'usuario', descripcion: 'Usuario básico del sistema' }
     ];
 
@@ -87,7 +88,8 @@ async function createRolesAndModules() {
       { nombre: 'Estadísticas', descripcion: 'Reportes y estadísticas' },
       { nombre: 'Notificaciones', descripcion: 'Sistema de notificaciones' },
       { nombre: 'Plantillas', descripcion: 'Gestión de plantillas de email' },
-      { nombre: 'Contador', descripcion: 'Acceso a módulos de contador' }
+      { nombre: 'Contador', descripcion: 'Acceso a módulos de contador' },
+      { nombre: 'Tickets', descripcion: 'Sistema de tickets y soporte' }
     ];
 
     for (const modulo of modulos) {
@@ -138,7 +140,7 @@ async function createRolesAndModules() {
 
     // Configurar permisos para admin (casi completo, pero sin gestión de roles críticos)
     if (roleMap['admin']) {
-      const adminModulos = ['Control', 'Empresas', 'Usuarios', 'Impuestos', 'Estadísticas', 'Notificaciones', 'Plantillas', 'Triggers'];
+      const adminModulos = ['Control', 'Empresas', 'Usuarios', 'Impuestos', 'Estadísticas', 'Notificaciones', 'Plantillas', 'Triggers', 'Tickets'];
       for (const moduloNombre of adminModulos) {
         if (moduloMap[moduloNombre]) {
           try {
@@ -170,7 +172,7 @@ async function createRolesAndModules() {
 
     // Configurar permisos para contador (acceso limitado)
     if (roleMap['contador']) {
-      const contadorModulos = ['Control', 'Contador', 'Impuestos'];
+      const contadorModulos = ['Control', 'Contador', 'Impuestos', 'Tickets'];
       for (const moduloNombre of contadorModulos) {
         if (moduloMap[moduloNombre]) {
           let permisos = 'ver';
@@ -209,6 +211,30 @@ async function createRolesAndModules() {
         }
       }
       console.log('✅ Permisos configurados para usuario');
+    }
+
+    // Configurar permisos para soporte (acceso a tickets y módulos relacionados)
+    if (roleMap['soporte']) {
+      const soporteModulos = ['Control', 'Tickets', 'Notificaciones'];
+      for (const moduloNombre of soporteModulos) {
+        if (moduloMap[moduloNombre]) {
+          let permisos = 'ver';
+          if (moduloNombre === 'Tickets' || moduloNombre === 'Notificaciones') {
+            permisos = 'ver,crear,editar,eliminar';
+          }
+          
+          try {
+            await client.query(`
+              INSERT INTO role_modulos (role_id, modulo_id, permisos, activo)
+              VALUES ($1, $2, $3, 1)
+              ON CONFLICT (role_id, modulo_id) DO UPDATE SET permisos = $3
+            `, [roleMap['soporte'], moduloMap[moduloNombre], permisos]);
+          } catch (error) {
+            console.error(`Error configurando permisos soporte para ${moduloNombre}:`, error);
+          }
+        }
+      }
+      console.log('✅ Permisos configurados para soporte');
     }
 
     // Actualizar usuario super_admin existente con role_id

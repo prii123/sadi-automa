@@ -101,6 +101,18 @@ CREATE TABLE IF NOT EXISTS empresas (
   fecha_actualizacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Tabla intermedia usuario-empresas (relación muchos a muchos)
+CREATE TABLE IF NOT EXISTS usuario_empresas (
+  id SERIAL PRIMARY KEY,
+  usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+  rol_en_empresa VARCHAR(50) DEFAULT 'usuario', -- 'contador', 'usuario', 'admin', etc.
+  activo INTEGER DEFAULT 1,
+  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(usuario_id, empresa_id)
+);
+
 -- ===========================================
 -- 4. TABLAS DEL CALENDARIO TRIBUTARIO
 -- ===========================================

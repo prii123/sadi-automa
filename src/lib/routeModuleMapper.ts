@@ -19,6 +19,7 @@ export const ROUTE_MODULE_MAP: Record<string, string> = {
   '/control/notificaciones': 'Notificaciones',
   '/control/plantillas': 'Plantillas',
   '/contador/calendario-tributario': 'Contador',
+  '/tickets': 'Tickets',
 };
 
 export const MODULE_ROUTE_MAP: Record<string, string> = {
@@ -32,6 +33,7 @@ export const MODULE_ROUTE_MAP: Record<string, string> = {
   'Plantillas': '/control/plantillas',
   'Contador': '/contador/calendario-tributario',
   'Roles': '/usuarios/roles',
+  'Tickets': '/tickets',
 };
 
 /**
@@ -61,6 +63,7 @@ export function getModuleFromPath(path: string): string | null {
     'contador': 'Contador',
     'estadisticas': 'Estadísticas',
     'plantillas': 'Plantillas',
+    'tickets': 'Tickets',
   };
 
   return segmentModuleMap[firstSegment] || null;
@@ -88,6 +91,7 @@ export function getIconForModule(moduleName: string): string {
     'Plantillas': '📝',
     'Contador': '📅',
     'Roles': '🔐',
+    'Tickets': '🎫',
   };
   return icons[moduleName] || '📄';
 }

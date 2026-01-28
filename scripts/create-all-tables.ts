@@ -121,6 +121,25 @@ async function createAllTables() {
     `);
 
     // ===========================================
+    // TABLA INTERMEDIA USUARIO-EMPRESAS
+    // ===========================================
+
+    console.log('🔗 Creando tabla intermedia usuario-empresas...');
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS usuario_empresas (
+        id SERIAL PRIMARY KEY,
+        usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+        empresa_id INTEGER NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+        rol_en_empresa VARCHAR(50) DEFAULT 'usuario',
+        activo INTEGER DEFAULT 1,
+        fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(usuario_id, empresa_id)
+      )
+    `);
+
+    // ===========================================
     // TABLAS DEL CALENDARIO TRIBUTARIO
     // ===========================================
 
