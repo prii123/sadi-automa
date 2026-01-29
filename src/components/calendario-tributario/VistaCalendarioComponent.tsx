@@ -263,7 +263,7 @@ export default function VistaCalendarioComponent({
     // Para fechas en formato YYYY-MM-DD, crear fecha local
     if (dateString.includes('-') && !dateString.includes('T')) {
       const [year, month, day] = dateString.split('-').map(Number);
-      return new Date(year, month - 1, day);
+      return new Date(year, month - 1, day+1);
     }
     return new Date(dateString);
   };
