@@ -106,13 +106,12 @@ export class CalendarioTributarioService {
   }
 
   /**
-   * Obtiene el último dígito del NIT (sin dígito de verificación)
+   * Obtiene el último dígito del NIT
    */
   private obtenerUltimoDigitoNIT(nit: string): string {
-    // Remover guiones, espacios y dígito de verificación
+    // Remover guiones y espacios
     const nitLimpio = nit.replace(/[-\s]/g, '');
-    const nitSinVerificacion = nitLimpio.slice(0, -1);
-    return nitSinVerificacion.slice(-1);
+    return nitLimpio.slice(-1);
   }
 
   /**
@@ -208,6 +207,7 @@ export class CalendarioTributarioService {
 
       // Obtener el dígito relevante del NIT
       const ultimoDigito = this.obtenerUltimoDigitoNIT(nitEmpresa);
+      console.log('Último dígito NIT:', ultimoDigito);
       const dosUltimosDigitos = this.obtenerDosUltimosDigitosNIT(nitEmpresa);
 
       // Obtener todos los vencimientos fiscales activos para el año SOLO de impuestos asignados a la empresa
@@ -235,23 +235,29 @@ export class CalendarioTributarioService {
             ? `${year}-${vencimiento.periodo}`
             : year.toString();
 
-          // Insertar o actualizar en calendario_tributario
-          const insertQuery = `
-            INSERT INTO calendario_tributario (empresa_id, vencimiento_impuesto_id, impuesto_id, fecha_vencimiento, periodo, estado)
-            VALUES ($1, $2, $3, $4, $5, 'pendiente')
-            ON CONFLICT (empresa_id, vencimiento_impuesto_id, periodo)
-            DO UPDATE SET fecha_vencimiento = EXCLUDED.fecha_vencimiento
+          // Verificar si ya existe un registro para esta empresa, impuesto y periodo
+          const existingQuery = `
+            SELECT id FROM calendario_tributario 
+            WHERE empresa_id = $1 AND impuesto_id = $2 AND periodo = $3
           `;
+          const existingResult = await query(existingQuery, [empresaId, vencimiento.impuesto_id, periodoCompleto]);
 
-          const params = [
-            empresaId,
-            vencimiento.id,
-            vencimiento.impuesto_id,
-            fechaVencimiento,
-            periodoCompleto
-          ];
-
-          await query(insertQuery, params);
+          if (existingResult.rows.length > 0) {
+            // Actualizar el registro existente
+            const updateQuery = `
+              UPDATE calendario_tributario 
+              SET vencimiento_impuesto_id = $1, fecha_vencimiento = $2, updated_at = CURRENT_TIMESTAMP
+              WHERE empresa_id = $3 AND impuesto_id = $4 AND periodo = $5
+            `;
+            await query(updateQuery, [vencimiento.id, fechaVencimiento, empresaId, vencimiento.impuesto_id, periodoCompleto]);
+          } else {
+            // Insertar nuevo registro
+            const insertQuery = `
+              INSERT INTO calendario_tributario (empresa_id, vencimiento_impuesto_id, impuesto_id, fecha_vencimiento, periodo, estado)
+              VALUES ($1, $2, $3, $4, $5, 'pendiente')
+            `;
+            await query(insertQuery, [empresaId, vencimiento.id, vencimiento.impuesto_id, fechaVencimiento, periodoCompleto]);
+          }
         }
       }
 
@@ -276,91 +282,72 @@ export class CalendarioTributarioService {
       const ultimoDigito = this.obtenerUltimoDigitoNIT(nit);
       const dosUltimosDigitos = this.obtenerDosUltimosDigitosNIT(nit);
 
-      // Obtener impuestos asignados a la empresa
-      const impuestosResult = await query(`
-        SELECT i.*, ei.fecha_asignacion
-        FROM impuestos i
-        JOIN empresa_impuestos ei ON ei.impuesto_id = i.id
-        WHERE ei.empresa_id = $1 AND ei.activo = true AND i.activo = true
-      `, [empresaId]);
-
-      const calendario: any[] = [];
-
-      for (const impuesto of impuestosResult.rows) {
-        // Obtener vencimientos del impuesto que coincidan con el dígito del NIT
-        let vencimientosQuery = `
-          SELECT * FROM vencimientos_impuestos 
-          WHERE impuesto_id = $1 AND activo = true
-          AND (
-            (tipo_dependencia_nit = 'ultimo_digito' AND digito = $2) OR
-            (tipo_dependencia_nit = 'dos_ultimos_digitos' AND digito = $3) OR
-            (depende_nit = false)
-          )
-        `;
-        const params = [impuesto.id, ultimoDigito, dosUltimosDigitos];
-
-        if (year) {
-          vencimientosQuery += ' AND anio_fiscal = $4';
-          params.push(year);
-        }
-
-        const vencimientosResult = await query(vencimientosQuery, params);
-
-        for (const vencimiento of vencimientosResult.rows) {
-          const fechaVencimiento = new Date(vencimiento.fecha_vencimiento);
-
-          // Verificar si ya existe en calendario_tributario
-          const existingResult = await query(`
-            SELECT id, estado, fecha_pago, monto_pagado, observaciones, synced_to_google, google_event_id, google_last_sync
-            FROM calendario_tributario 
-            WHERE empresa_id = $1 AND vencimiento_impuesto_id = $2 AND fecha_vencimiento::date = $3
-          `, [empresaId, vencimiento.id, fechaVencimiento.toISOString().split('T')[0]]);
-
-          let calendarioItem: any;
-
-          if (existingResult.rows.length > 0) {
-            // Usar datos existentes
-            calendarioItem = existingResult.rows[0];
-          } else {
-            // Crear nuevo item
-            calendarioItem = {
-              id: null, // Será asignado al insertar
-              estado: 'pendiente',
-              synced_to_google: false
-            };
-          }
-
-          calendario.push({
-            id: calendarioItem.id,
-            empresa_id: empresaId,
-            vencimiento_impuesto_id: vencimiento.id,
-            fecha_vencimiento: fechaVencimiento.toISOString().split('T')[0],
-            periodo: vencimiento.periodo || 'Anual',
-            estado: calendarioItem.estado,
-            fecha_pago: calendarioItem.fecha_pago,
-            monto_pagado: calendarioItem.monto_pagado,
-            observaciones: calendarioItem.observaciones,
-            synced_to_google: calendarioItem.synced_to_google,
-            google_event_id: calendarioItem.google_event_id,
-            google_last_sync: calendarioItem.google_last_sync,
-            impuesto_nombre: impuesto.nombre,
-            impuesto_codigo: impuesto.codigo,
-            tipo_impuesto: impuesto.tipo,
-            periodicidad: impuesto.periodicidad,
-            impuesto_color: impuesto.color,
-            anio_fiscal: vencimiento.anio_fiscal,
-            periodo_impuesto: vencimiento.periodo,
-            vencimiento_descripcion: vencimiento.descripcion,
-            digito: vencimiento.digito || ultimoDigito,
-            vencimiento_base: vencimiento.fecha_vencimiento
-          });
-        }
+      // Obtener calendario tributario con inner join a vencimientos_impuestos
+      let calendarioQuery = `
+        SELECT 
+          ct.id,
+          ct.empresa_id,
+          ct.vencimiento_impuesto_id,
+          ct.fecha_vencimiento,
+          ct.periodo,
+          ct.estado,
+          ct.fecha_pago,
+          ct.monto_pagado,
+          ct.observaciones,
+          ct.synced_to_google,
+          ct.google_event_id,
+          ct.google_last_sync,
+          vi.anio_fiscal,
+          vi.periodo as periodo_impuesto,
+          vi.descripcion as vencimiento_descripcion,
+          vi.digito,
+          vi.fecha_vencimiento as vencimiento_base,
+          i.nombre as impuesto_nombre,
+          i.codigo as impuesto_codigo,
+          i.tipo as tipo_impuesto,
+          i.periodicidad,
+          i.color as impuesto_color
+        FROM calendario_tributario ct
+        INNER JOIN vencimientos_impuestos vi ON ct.vencimiento_impuesto_id = vi.id
+        INNER JOIN impuestos i ON vi.impuesto_id = i.id
+        WHERE ct.empresa_id = $1 AND i.activo = true
+      `;
+      
+      const params = [empresaId];
+      
+      if (year) {
+        calendarioQuery += ' AND vi.anio_fiscal = $2';
+        params.push(year);
       }
-
-      // Ordenar por fecha de vencimiento
-      calendario.sort((a, b) => new Date(a.fecha_vencimiento).getTime() - new Date(b.fecha_vencimiento).getTime());
-
-      return calendario;
+      
+      calendarioQuery += ' ORDER BY ct.fecha_vencimiento ASC';
+      
+      const result = await query(calendarioQuery, params);
+      
+      return result.rows.map(row => ({
+        id: row.id,
+        empresa_id: row.empresa_id,
+        vencimiento_impuesto_id: row.vencimiento_impuesto_id,
+        fecha_vencimiento: row.fecha_vencimiento, // Fecha específica del calendario
+        periodo: row.periodo,
+        estado: row.estado,
+        fecha_pago: row.fecha_pago,
+        monto_pagado: row.monto_pagado,
+        observaciones: row.observaciones,
+        synced_to_google: row.synced_to_google,
+        google_event_id: row.google_event_id,
+        google_last_sync: row.google_last_sync,
+        impuesto_nombre: row.impuesto_nombre,
+        impuesto_codigo: row.impuesto_codigo,
+        tipo_impuesto: row.tipo_impuesto,
+        periodicidad: row.periodicidad,
+        impuesto_color: row.impuesto_color,
+        anio_fiscal: row.anio_fiscal,
+        periodo_impuesto: row.periodo_impuesto,
+        vencimiento_descripcion: row.vencimiento_descripcion,
+        digito: row.digito,
+        vencimiento_base: row.vencimiento_base
+      }));
     } catch (error) {
       console.error('❌ Error obteniendo calendario:', error);
       throw error;

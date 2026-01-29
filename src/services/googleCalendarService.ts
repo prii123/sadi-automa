@@ -346,11 +346,11 @@ export class GoogleCalendarService {
         summary: eventData.summary,
         description: eventData.description,
         start: {
-          dateTime: new Date(eventData.startDate + 'T00:00:00-05:00').toISOString(), // Inicio del día en zona horaria de Colombia (UTC-5)
+          dateTime: eventData.startDate + 'T00:00:00-05:00', // Inicio del día en zona horaria de Colombia (UTC-5)
           timeZone: 'America/Bogota',
         },
         end: {
-          dateTime: new Date(eventData.startDate + 'T23:59:59-05:00').toISOString(), // Fin del día en zona horaria de Colombia (UTC-5)
+          dateTime: eventData.startDate + 'T23:59:59-05:00', // Fin del día en zona horaria de Colombia (UTC-5)
           timeZone: 'America/Bogota',
         },
         reminders: {

@@ -29,6 +29,7 @@ export async function GET() {
       updated_at: row.updated_at
     }));
 
+
     return NextResponse.json({
       success: true,
       vencimientos: vencimientos

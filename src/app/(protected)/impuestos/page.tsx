@@ -403,6 +403,7 @@ export default function ImpuestosPage() {
         });
 
         const data = await response.json();
+        // console.log(response)
         if (!data.success) {
           alert(`Error creando vencimiento para ${periodoInfo.nombre}: ${data.error}`);
           return;
@@ -1360,9 +1361,9 @@ export default function ImpuestosPage() {
                                       const nitDisplay = vencimiento.tipo_dependencia_nit === 'dos_ultimos_digitos' 
                                         ? `termina en ${vencimiento.digito}` 
                                         : `termina en ${vencimiento.digito}`;
-                                      digitoFechaMap[nitDisplay] = formatDate(vencimiento.fecha_vencimiento);
+                                      digitoFechaMap[nitDisplay] = vencimiento.fecha_vencimiento; //formatDate(vencimiento.fecha_vencimiento);
                                     } else if (!vencimiento.depende_nit && vencimiento.fecha_vencimiento) {
-                                      digitoFechaMap['Fecha fija'] = formatDate(vencimiento.fecha_vencimiento);
+                                      digitoFechaMap['Fecha fija'] = vencimiento.fecha_vencimiento; //formatDate(vencimiento.fecha_vencimiento);
                                     }
                                   });
 

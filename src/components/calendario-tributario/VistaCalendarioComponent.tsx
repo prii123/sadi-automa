@@ -137,8 +137,8 @@ export default function VistaCalendarioComponent({
         const calendarEvents = filteredData.map((item: any) => ({
           id: item.id,
           title: `${item.impuesto_nombre} - ${item.empresa_nombre}`,
-          start: new Date(item.fecha_vencimiento),
-          end: new Date(item.fecha_vencimiento),
+          start: parseDate(item.fecha_vencimiento),
+          end: parseDate(item.fecha_vencimiento),
           resource: {
             empresa: item.empresa_nombre || 'Sin nombre',
             nit: item.empresa_nit || 'Sin NIT',
@@ -250,7 +250,22 @@ export default function VistaCalendarioComponent({
   };
 
   const formatDate = (dateString: string) => {
+    // Para fechas en formato YYYY-MM-DD, crear fecha local
+    if (dateString.includes('-') && !dateString.includes('T')) {
+      const [year, month, day] = dateString.split('-').map(Number);
+      const localDate = new Date(year, month - 1, day);
+      return localDate.toLocaleDateString('es-CO');
+    }
     return new Date(dateString).toLocaleDateString('es-CO');
+  };
+
+  const parseDate = (dateString: string) => {
+    // Para fechas en formato YYYY-MM-DD, crear fecha local
+    if (dateString.includes('-') && !dateString.includes('T')) {
+      const [year, month, day] = dateString.split('-').map(Number);
+      return new Date(year, month - 1, day);
+    }
+    return new Date(dateString);
   };
 
   if (loading) {

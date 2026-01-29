@@ -549,13 +549,15 @@ export default function CalendarioTributarioComponent({
   };
 
   const formatDate = (dateString: string) => {
-    // Si la fecha incluye hora, usar directamente
-    if (dateString.includes('T')) {
-      return new Date(dateString).toLocaleDateString('es-CO');
+    // Para fechas en formato YYYY-MM-DD, crear fecha local para evitar problemas de zona horaria
+    if (dateString.includes('-') && !dateString.includes('T')) {
+      const [year, month, day] = dateString.split('-').map(Number);
+      // Crear fecha local (no UTC) para que se muestre correctamente
+      const localDate = new Date(year, month - 1, day);
+      return localDate.toLocaleDateString('es-CO');
     }
-    // Si es solo fecha (YYYY-MM-DD), tratarla como fecha local para evitar problemas de zona horaria
-    const [year, month, day] = dateString.split('-').map(Number);
-    return new Date(year, month - 1, day).toLocaleDateString('es-CO');
+    // Si incluye hora, usar directamente
+    return new Date(dateString).toLocaleDateString('es-CO');
   };
 
   // Función helper para formatear fechas en templates de string
@@ -565,8 +567,8 @@ export default function CalendarioTributarioComponent({
 
   // Función helper para convertir fecha string a Date correctamente
   const parseDate = (dateString: string) => {
-    // Si es solo fecha (YYYY-MM-DD), tratarla como fecha local
-    if (!dateString.includes('T')) {
+    // Para fechas en formato YYYY-MM-DD, crear fecha local
+    if (dateString.includes('-') && !dateString.includes('T')) {
       const [year, month, day] = dateString.split('-').map(Number);
       return new Date(year, month - 1, day);
     }
@@ -768,7 +770,7 @@ export default function CalendarioTributarioComponent({
 Impuesto: ${evento.impuesto_nombre} (${evento.impuesto_codigo})
 Tipo: ${evento.tipo_impuesto}
 Periodo: ${evento.periodo}
-Fecha de vencimiento: ${formatDateForTemplate(evento.fecha_vencimiento)}
+Fecha de vencimiento: ${evento.fecha_vencimiento}
 Estado: ${evento.estado}
 
 Generado automáticamente por SADI`;
@@ -875,7 +877,7 @@ Generado automáticamente por SADI`;
 Impuesto: ${evento.impuesto_nombre} (${evento.impuesto_codigo})
 Tipo: ${evento.tipo_impuesto}
 Periodo: ${evento.periodo}
-Fecha de vencimiento: ${formatDateForTemplate(evento.fecha_vencimiento)}
+Fecha de vencimiento: ${evento.fecha_vencimiento}
 Estado: ${evento.estado}
 
 Generado automáticamente por SADI`,
@@ -1771,7 +1773,7 @@ Generado automáticamente por SADI`,
                                   </div>
                                 ) : (
                                   <div className="font-medium">
-                                    {formatDate(firstItem.fecha_vencimiento)}
+                                    {firstItem.fecha_vencimiento}
                                   </div>
                                 )}
                               </td>
@@ -1871,7 +1873,7 @@ Generado automáticamente por SADI`,
                                     <div className="flex items-center space-x-2">
                                       <span className="text-xs font-medium text-gray-500">Vence:</span>
                                       <span className="text-sm font-medium text-gray-900">
-                                        {formatDate(item.fecha_vencimiento)}
+                                        {item.fecha_vencimiento}
                                       </span>
                                     </div>
                                   </div>
