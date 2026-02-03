@@ -23,6 +23,8 @@ export default function ContadorPage() {
   const [user, setUser] = useState<User | null>(null);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [loading, setLoading] = useState(true);
+  const [conciliacionLoading, setConciliacionLoading] = useState(false);
+  const [conciliacionError, setConciliacionError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -51,6 +53,86 @@ export default function ContadorPage() {
     loadData();
   }, []);
 
+  const handleConciliacionLogin = async () => {
+    setConciliacionLoading(true);
+    setConciliacionError(null);
+
+    try {
+      console.log('Intentando conectar con sistema de conciliación...');
+      const response = await fetch('/api/conciliacion/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('Respuesta recibida:', response.status, response.statusText);
+
+      if (response.redirected) {
+        // Si la API redirige (caso raro), seguir la redirección
+        console.log('Redirigiendo a:', response.url);
+        window.open(response.url, '_blank');
+      } else if (response.ok) {
+        // Parsear respuesta JSON
+        const data = await response.json();
+        console.log('Datos de respuesta:', data);
+
+        if (data.success && data.token) {
+          // Éxito: redirigir con token en URL para que el sistema de conciliación lo detecte y guarde en cookies
+          let redirectUrl = `http://64.23.180.56:8000?access_token=${encodeURIComponent(data.token)}`;
+          if (data.token_type) {
+            redirectUrl += `&token_type=${encodeURIComponent(data.token_type)}`;
+          }
+          console.log('Redirigiendo con token en URL:', redirectUrl);
+          window.open(redirectUrl, '_blank');
+        } else if (data.fallbackUrl) {
+          // Fallback: abrir login normal
+          console.log('Usando URL de fallback:', data.fallbackUrl);
+          setConciliacionError(data.error || 'Autenticación automática no disponible, abriendo login normal...');
+          setTimeout(() => {
+            window.open(data.fallbackUrl, '_blank');
+          }, 2000);
+        }
+      } else {
+        // Error HTTP del endpoint local
+        console.log('Error HTTP del endpoint local:', response.status);
+        if (response.status === 401) {
+          setConciliacionError('Usuario no autenticado. Por favor, recarga la página e intenta nuevamente.');
+        } else if (response.status === 500) {
+          setConciliacionError('Error interno del servidor. El servicio podría no estar disponible.');
+        } else {
+          setConciliacionError(`Error del servidor (${response.status}). Intenta nuevamente más tarde.`);
+        }
+      }
+    } catch (error) {
+      console.error('Error completo en conciliación:', error);
+
+      // Determinar el tipo de error
+      if (error instanceof TypeError) {
+        if (error.message.includes('Failed to fetch')) {
+          console.log('Error de conexión detectado');
+          setConciliacionError('No se pudo conectar al servidor. Verifica tu conexión a internet o que el servicio esté disponible.');
+        } else if (error.message.includes('NetworkError')) {
+          setConciliacionError('Error de red. Verifica tu conexión a internet.');
+        } else {
+          setConciliacionError(`Error de conexión: ${error.message}`);
+        }
+      } else if (error instanceof Error) {
+        setConciliacionError(`Error inesperado: ${error.message}`);
+      } else {
+        setConciliacionError('Error desconocido al conectar con el sistema de conciliación.');
+      }
+
+      // Fallback: abrir login normal después de un delay
+      setTimeout(() => {
+        console.log('Abriendo login normal como fallback');
+        window.open('http://64.23.180.56:8000/login', '_blank');
+      }, 3000);
+    } finally {
+      setConciliacionLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-6 max-w-7xl mx-auto">
@@ -74,6 +156,36 @@ export default function ContadorPage() {
         <p className="text-gray-600 mt-2">
           Bienvenido {user.nombre} {user.apellido}
         </p>
+        
+        {/* Anuncio del sistema de conciliación bancaria */}
+        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <button
+            onClick={handleConciliacionLogin}
+            disabled={conciliacionLoading}
+            className="inline-flex items-center text-blue-700 hover:text-blue-800 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {conciliacionLoading ? (
+              <svg className="animate-spin w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            ) : (
+              <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            )}
+            {conciliacionLoading ? 'Conectando...' : 'Ir a sistema de conciliación bancaria'}
+          </button>
+          
+          {conciliacionError && (
+            <p className="mt-2 text-sm text-red-600 flex items-center">
+              <svg className="w-4 h-4 mr-1 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {conciliacionError}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Estadísticas rápidas */}

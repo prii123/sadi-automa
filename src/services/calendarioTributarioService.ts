@@ -115,13 +115,12 @@ export class CalendarioTributarioService {
   }
 
   /**
-   * Obtiene los dos últimos dígitos del NIT (sin dígito de verificación)
+   * Obtiene los dos últimos dígitos del NIT
    */
   private obtenerDosUltimosDigitosNIT(nit: string): string {
-    // Remover guiones, espacios y dígito de verificación
+    // Remover guiones y espacios
     const nitLimpio = nit.replace(/[-\s]/g, '');
-    const nitSinVerificacion = nitLimpio.slice(0, -1);
-    return nitSinVerificacion.slice(-2);
+    return nitLimpio.slice(-2);
   }
 
   /**
