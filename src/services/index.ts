@@ -10,3 +10,8 @@ export * from './roleService';
 export * from './plantillaService';
 export * from './documentAttachmentService';
 export * from './ticketService';
+export * from './informacionExogenaService';
+export * from './planCuentasService';
+export * from './cuentasAuxiliaresService';
+export * from './tercerosService';
+export * from './asociacionesService';

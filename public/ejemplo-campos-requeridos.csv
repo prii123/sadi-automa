@@ -1,0 +1,12 @@
+atributo,denominacion,tipo,longitud,criterios
+nit,NIT del informado,Alfanumérico,15,Obligatorio - Sin guiones ni puntos
+primer_apellido,Primer apellido del informado,Texto,60,Obligatorio para personas naturales
+segundo_apellido,Segundo apellido del informado,Texto,60,Opcional
+primer_nombre,Primer nombre del informado,Texto,60,Obligatorio para personas naturales
+otros_nombres,Otros nombres del informado,Texto,60,Opcional
+razon_social,Razón social,Texto,450,Obligatorio para personas jurídicas
+direccion,Dirección,Texto,200,Obligatorio
+codigo_dpto,Código del departamento,Número,2,Obligatorio
+codigo_mun,Código del municipio,Número,3,Obligatorio
+pais,País de residencia o domicilio,Texto,100,Obligatorio
+valor,Valor de la operación,Número,15,Obligatorio

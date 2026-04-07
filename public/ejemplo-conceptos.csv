@@ -1,0 +1,11 @@
+codigo,nombre,descripcion
+5001,Pagos o abonos en cuenta efectuados a personas naturales,Pagos o abonos en cuenta por concepto de salarios y demás
+5002,Pagos o abonos en cuenta por otros conceptos,Otros conceptos diferentes a salarios
+5003,Retenciones en la fuente practicadas,Valores retenidos en la fuente durante el año
+5004,IVA descontable pagado,IVA pagado en adquisiciones que es descontable
+5005,IVA generado,IVA generado por operaciones gravadas
+5006,Ingresos brutos por operaciones gravadas,Total de ingresos por operaciones gravadas con IVA
+5007,Ingresos brutos por operaciones exentas,Total de ingresos por operaciones exentas
+5008,Compras y gastos,Total de compras y gastos del período
+5009,Retenciones a terceros,Retenciones practicadas a terceros
+5010,Impuesto de industria y comercio,Impuesto de industria y comercio retenido

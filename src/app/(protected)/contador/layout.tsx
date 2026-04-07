@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import RouteProtection from '@/components/RouteProtection';
+import ContadorNavbar from '@/components/ContadorNavbar';
 
 interface ContadorLayoutProps {
   children: ReactNode;
@@ -8,7 +9,10 @@ interface ContadorLayoutProps {
 export default function ContadorLayout({ children }: ContadorLayoutProps) {
   return (
     <RouteProtection requiredPermission="ver">
-      {children}
+      <div>
+        <ContadorNavbar />
+        {children}
+      </div>
     </RouteProtection>
   );
 }

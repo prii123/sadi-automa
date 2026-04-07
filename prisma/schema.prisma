@@ -1,0 +1,734 @@
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model calendario_tributario {
+  id                      Int                     @id @default(autoincrement())
+  empresa_id              Int?
+  impuesto_id             Int?
+  fecha_vencimiento       DateTime                @db.Timestamp(6)
+  periodo                 String?                 @db.VarChar(20)
+  estado                  String?                 @default("pendiente") @db.VarChar(20)
+  fecha_pago              DateTime?               @db.Date
+  monto_pagado            Decimal?                @db.Decimal(15, 2)
+  observaciones           String?
+  created_at              DateTime?               @default(now()) @db.Timestamp(6)
+  updated_at              DateTime?               @default(now()) @db.Timestamp(6)
+  vencimiento_impuesto_id Int?
+  google_event_id         String?                 @db.VarChar(255)
+  synced_to_google        Boolean?                @default(false)
+  google_last_sync        DateTime?               @db.Timestamp(6)
+  empresas                empresas?               @relation(fields: [empresa_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  impuestos               impuestos?              @relation(fields: [impuesto_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  vencimientos_impuestos  vencimientos_impuestos? @relation(fields: [vencimiento_impuesto_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([empresa_id, vencimiento_impuesto_id, periodo], map: "calendario_tributario_empresa_id_vencimiento_impuesto_id_period")
+  @@index([empresa_id, fecha_vencimiento], map: "idx_calendario_empresa_fecha")
+  @@index([empresa_id], map: "idx_calendario_empresa_id")
+  @@index([estado], map: "idx_calendario_estado")
+  @@index([fecha_vencimiento], map: "idx_calendario_fecha_vencimiento")
+  @@index([google_event_id], map: "idx_calendario_google_event_id")
+  @@index([synced_to_google], map: "idx_calendario_synced_to_google")
+  @@index([vencimiento_impuesto_id], map: "idx_calendario_vencimiento_impuesto_id")
+}
+
+model certificados {
+  id                  Int       @id @default(autoincrement())
+  empresa_id          Int
+  activo              Int?      @default(1)
+  fecha_inicio        DateTime? @db.Date
+  fecha_final         DateTime? @db.Date
+  notificacion        String?
+  renovado            Int?      @default(0)
+  facturado           Int?      @default(0)
+  comentarios         String?
+  fecha_creacion      DateTime? @default(now()) @db.Timestamp(6)
+  fecha_actualizacion DateTime? @default(now()) @db.Timestamp(6)
+  empresas            empresas  @relation(fields: [empresa_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([activo], map: "idx_certificados_activo")
+  @@index([empresa_id], map: "idx_certificados_empresa_id")
+  @@index([fecha_final], map: "idx_certificados_fecha_final")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model document_attachments {
+  id                  Int       @id @default(autoincrement())
+  document_type       String    @db.VarChar(50)
+  document_id         Int
+  filename            String    @db.VarChar(255)
+  original_filename   String    @db.VarChar(255)
+  file_path           String
+  file_size           Int?
+  mime_type           String?   @db.VarChar(100)
+  uploaded_by         Int?
+  fecha_creacion      DateTime? @default(now()) @db.Timestamp(6)
+  fecha_actualizacion DateTime? @default(now()) @db.Timestamp(6)
+  usuarios            usuarios? @relation(fields: [uploaded_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([document_type, document_id, filename])
+  @@index([document_type, document_id], map: "idx_document_attachments_type_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model document_template_attachments {
+  id            Int         @id @default(autoincrement())
+  template_id   Int?
+  document_type String      @db.VarChar(50)
+  file_name     String      @db.VarChar(255)
+  original_name String      @db.VarChar(255)
+  file_size     Int
+  mime_type     String      @default("application/pdf") @db.VarChar(100)
+  description   String?
+  active        Boolean?    @default(true)
+  created_at    DateTime?   @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime?   @default(now()) @db.Timestamptz(6)
+  plantillas    plantillas? @relation(fields: [template_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([active], map: "idx_document_template_attachments_active")
+  @@index([template_id], map: "idx_document_template_attachments_template_id")
+  @@index([document_type], map: "idx_document_template_attachments_type")
+}
+
+model documentos {
+  id                  Int       @id @default(autoincrement())
+  empresa_id          Int
+  activo              Int?      @default(1)
+  fecha_inicio        DateTime? @db.Date
+  fecha_final         DateTime? @db.Date
+  notificacion        String?
+  renovado            Int?      @default(0)
+  facturado           Int?      @default(0)
+  comentarios         String?
+  fecha_creacion      DateTime? @default(now()) @db.Timestamp(6)
+  fecha_actualizacion DateTime? @default(now()) @db.Timestamp(6)
+  empresas            empresas  @relation(fields: [empresa_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([activo], map: "idx_documentos_activo")
+  @@index([empresa_id], map: "idx_documentos_empresa_id")
+  @@index([fecha_final], map: "idx_documentos_fecha_final")
+}
+
+model empresa_contacto {
+  id               Int       @id @default(autoincrement())
+  empresa_id       Int       @unique
+  telefono         String?   @db.VarChar(20)
+  email            String?   @db.VarChar(255)
+  direccion        String?
+  persona_contacto String?   @db.VarChar(255)
+  activo           Boolean?  @default(true)
+  created_at       DateTime? @default(now()) @db.Timestamp(6)
+  updated_at       DateTime? @default(now()) @db.Timestamp(6)
+  empresas         empresas  @relation(fields: [empresa_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([activo], map: "idx_empresa_contacto_activo")
+  @@index([empresa_id], map: "idx_empresa_contacto_empresa_id")
+}
+
+model empresa_impuestos {
+  id               Int        @id @default(autoincrement())
+  empresa_id       Int?
+  impuesto_id      Int?
+  activo           Boolean?   @default(true)
+  fecha_asignacion DateTime?  @default(now()) @db.Timestamp(6)
+  created_at       DateTime?  @default(now()) @db.Timestamp(6)
+  updated_at       DateTime?  @default(now()) @db.Timestamp(6)
+  empresas         empresas?  @relation(fields: [empresa_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  impuestos        impuestos? @relation(fields: [impuesto_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([empresa_id, impuesto_id])
+  @@index([activo], map: "idx_empresa_impuestos_activo")
+  @@index([empresa_id], map: "idx_empresa_impuestos_empresa")
+  @@index([empresa_id], map: "idx_empresa_impuestos_empresa_id")
+  @@index([impuesto_id], map: "idx_empresa_impuestos_impuesto")
+  @@index([impuesto_id], map: "idx_empresa_impuestos_impuesto_id")
+}
+
+model empresas {
+  id                    Int                     @id @default(autoincrement())
+  nit                   String                  @unique
+  nombre                String
+  tipo                  String
+  estado                String                  @default("activo")
+  fecha_creacion        DateTime                @db.Timestamp(6)
+  fecha_actualizacion   DateTime                @db.Timestamp(6)
+  contador_id           Int?
+  calendario_tributario calendario_tributario[]
+  certificados          certificados[]
+  documentos            documentos[]
+  empresa_contacto      empresa_contacto?
+  empresa_impuestos     empresa_impuestos[]
+  usuarios              usuarios?               @relation(fields: [contador_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  eventos_tributarios   eventos_tributarios[]
+  notificaciones        notificaciones[]
+  resoluciones          resoluciones[]
+  tickets               tickets[]
+  usuario_empresas      usuario_empresas[]
+  vigencias_exogena     vigencias_exogena[]
+
+  @@index([contador_id], map: "idx_contador_id")
+  @@index([contador_id], map: "idx_empresas_contador_id")
+  @@index([estado], map: "idx_empresas_estado")
+  @@index([nit], map: "idx_empresas_nit")
+  @@index([estado], map: "idx_estado")
+  @@index([nit], map: "idx_nit")
+}
+
+model event_attendees {
+  id              Int       @id @default(autoincrement())
+  event_id        String    @db.VarChar(255)
+  attendee_email  String    @db.VarChar(255)
+  response_status String?   @default("needsAction") @db.VarChar(50)
+  last_updated    DateTime? @default(now()) @db.Timestamp(6)
+  created_at      DateTime? @default(now()) @db.Timestamp(6)
+
+  @@unique([event_id, attendee_email])
+  @@index([attendee_email], map: "idx_event_attendees_email")
+  @@index([event_id], map: "idx_event_attendees_event_id")
+  @@index([response_status], map: "idx_event_attendees_status")
+}
+
+model eventos_tributarios {
+  id                  Int      @id @default(autoincrement())
+  titulo              String
+  descripcion         String?
+  tipo                String
+  fecha_vencimiento   DateTime @db.Timestamp(6)
+  empresa_id          Int
+  estado              String?  @default("pendiente")
+  prioridad           String?  @default("media")
+  monto               Decimal? @db.Decimal(15, 2)
+  observaciones       String?
+  fecha_creacion      DateTime @default(now()) @db.Timestamp(6)
+  fecha_actualizacion DateTime @default(now()) @db.Timestamp(6)
+  empresas            empresas @relation(fields: [empresa_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([empresa_id], map: "idx_eventos_tributarios_empresa_id")
+  @@index([estado], map: "idx_eventos_tributarios_estado")
+  @@index([fecha_vencimiento], map: "idx_eventos_tributarios_fecha_vencimiento")
+}
+
+model google_calendar_config {
+  id           Int       @id @default(autoincrement())
+  config_key   String    @unique @db.VarChar(255)
+  config_value String?
+  created_at   DateTime? @default(now()) @db.Timestamp(6)
+  updated_at   DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([config_key], map: "idx_google_calendar_config_key")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model impuestos {
+  id                     Int                      @id @default(autoincrement())
+  nombre                 String                   @db.VarChar(200)
+  codigo                 String                   @unique @db.VarChar(50)
+  tipo                   String                   @db.VarChar(20)
+  periodicidad           String                   @db.VarChar(20)
+  departamento           String?                  @db.VarChar(100)
+  municipio              String?                  @db.VarChar(100)
+  descripcion            String?
+  activo                 Boolean?                 @default(true)
+  created_at             DateTime?                @default(now()) @db.Timestamp(6)
+  updated_at             DateTime?                @default(now()) @db.Timestamp(6)
+  color                  String?                  @default("#3B82F6") @db.VarChar(7)
+  calendario_tributario  calendario_tributario[]
+  empresa_impuestos      empresa_impuestos[]
+  vencimientos_impuestos vencimientos_impuestos[]
+
+  @@index([activo], map: "idx_impuestos_activo")
+  @@index([codigo], map: "idx_impuestos_codigo")
+  @@index([tipo], map: "idx_impuestos_tipo")
+}
+
+model modulos {
+  id                  Int            @id @default(autoincrement())
+  nombre              String         @unique
+  ruta                String
+  descripcion         String?
+  activo              Int?           @default(1)
+  fecha_creacion      DateTime?      @default(now()) @db.Timestamp(6)
+  fecha_actualizacion DateTime?      @default(now()) @db.Timestamp(6)
+  role_modulos        role_modulos[]
+
+  @@index([activo], map: "idx_modulos_activo")
+}
+
+model notificaciones {
+  id                  Int       @id @default(autoincrement())
+  tipo                String    @db.VarChar(50)
+  titulo              String    @db.VarChar(255)
+  mensaje             String
+  destinatarios       String[]
+  empresa_id          Int?
+  usuario_id          Int?
+  datos               Json?
+  leido               Boolean?  @default(false)
+  enviado             Boolean?  @default(false)
+  fecha_envio         DateTime? @db.Timestamp(6)
+  fecha_creacion      DateTime? @default(now()) @db.Timestamp(6)
+  fecha_actualizacion DateTime? @default(now()) @db.Timestamp(6)
+  empresas            empresas? @relation(fields: [empresa_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuarios            usuarios? @relation(fields: [usuario_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([empresa_id], map: "idx_notificaciones_empresa_id")
+  @@index([enviado], map: "idx_notificaciones_enviado")
+  @@index([leido], map: "idx_notificaciones_leido")
+  @@index([tipo], map: "idx_notificaciones_tipo")
+  @@index([usuario_id], map: "idx_notificaciones_usuario_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model plantilla_variables {
+  id                  Int        @id @default(autoincrement())
+  plantilla_id        Int
+  nombre              String     @db.VarChar(100)
+  descripcion         String?
+  tipo                String?    @default("texto") @db.VarChar(50)
+  requerido           Boolean?   @default(false)
+  valor_defecto       String?
+  opciones            Json?
+  orden               Int?       @default(0)
+  activo              Boolean?   @default(true)
+  fecha_creacion      DateTime?  @default(now()) @db.Timestamp(6)
+  fecha_actualizacion DateTime?  @default(now()) @db.Timestamp(6)
+  plantillas          plantillas @relation(fields: [plantilla_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([plantilla_id, nombre])
+  @@index([plantilla_id], map: "idx_plantilla_variables_plantilla_id")
+  @@index([requerido], map: "idx_plantilla_variables_requerido")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model plantillas {
+  id                            Int                             @id @default(autoincrement())
+  nombre                        String                          @db.VarChar(255)
+  descripcion                   String?
+  tipo                          String                          @db.VarChar(50)
+  contenido                     String
+  variables                     Json?                           @default("[]")
+  activo                        Boolean?                        @default(true)
+  fecha_creacion                DateTime?                       @default(now()) @db.Timestamp(6)
+  fecha_actualizacion           DateTime?                       @default(now()) @db.Timestamp(6)
+  creado_por                    Int?
+  document_template_attachments document_template_attachments[]
+  plantilla_variables           plantilla_variables[]
+  usuarios                      usuarios?                       @relation(fields: [creado_por], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([activo], map: "idx_plantillas_activo")
+  @@index([creado_por], map: "idx_plantillas_creado_por")
+  @@index([tipo], map: "idx_plantillas_tipo")
+}
+
+model resoluciones {
+  id                  Int       @id @default(autoincrement())
+  empresa_id          Int
+  activo              Int?      @default(1)
+  fecha_inicio        DateTime? @db.Date
+  fecha_final         DateTime? @db.Date
+  notificacion        String?
+  renovado            Int?      @default(0)
+  facturado           Int?      @default(0)
+  comentarios         String?
+  fecha_creacion      DateTime? @default(now()) @db.Timestamp(6)
+  fecha_actualizacion DateTime? @default(now()) @db.Timestamp(6)
+  empresas            empresas  @relation(fields: [empresa_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([activo], map: "idx_resoluciones_activo")
+  @@index([empresa_id], map: "idx_resoluciones_empresa_id")
+  @@index([fecha_final], map: "idx_resoluciones_fecha_final")
+}
+
+model role_modulos {
+  id                  Int       @id @default(autoincrement())
+  role_id             Int
+  modulo_id           Int
+  permisos            String
+  activo              Int?      @default(1)
+  fecha_creacion      DateTime? @default(now()) @db.Timestamp(6)
+  fecha_actualizacion DateTime? @default(now()) @db.Timestamp(6)
+  modulos             modulos   @relation(fields: [modulo_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  roles               roles     @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([role_id, modulo_id])
+  @@index([modulo_id], map: "idx_role_modulos_modulo_id")
+  @@index([role_id], map: "idx_role_modulos_role_id")
+}
+
+model roles {
+  id                  Int            @id @default(autoincrement())
+  nombre              String         @unique
+  descripcion         String?
+  activo              Int?           @default(1)
+  fecha_creacion      DateTime?      @default(now()) @db.Timestamp(6)
+  fecha_actualizacion DateTime?      @default(now()) @db.Timestamp(6)
+  role_modulos        role_modulos[]
+  usuarios            usuarios[]
+
+  @@index([activo], map: "idx_roles_activo")
+}
+
+model ticket_estados {
+  id                  Int       @id @default(autoincrement())
+  nombre              String    @unique @db.VarChar(50)
+  descripcion         String?
+  activo              Int?      @default(1)
+  fecha_creacion      DateTime? @default(now()) @db.Timestamp(6)
+  fecha_actualizacion DateTime? @default(now()) @db.Timestamp(6)
+  tickets             tickets[]
+}
+
+model ticket_messages {
+  id             Int       @id @default(autoincrement())
+  ticket_id      Int
+  user_id        Int
+  message        String
+  fecha_creacion DateTime? @default(now()) @db.Timestamp(6)
+  tickets        tickets   @relation(fields: [ticket_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  usuarios       usuarios  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([ticket_id], map: "idx_ticket_messages_ticket_id")
+  @@index([user_id], map: "idx_ticket_messages_user_id")
+}
+
+model ticket_modulos {
+  id                  Int       @id @default(autoincrement())
+  nombre              String    @unique @db.VarChar(100)
+  descripcion         String?
+  activo              Int?      @default(1)
+  fecha_creacion      DateTime? @default(now()) @db.Timestamp(6)
+  fecha_actualizacion DateTime? @default(now()) @db.Timestamp(6)
+  tickets             tickets[]
+}
+
+model ticket_prioridades {
+  id                  Int       @id @default(autoincrement())
+  nombre              String    @unique @db.VarChar(50)
+  descripcion         String?
+  activo              Int?      @default(1)
+  fecha_creacion      DateTime? @default(now()) @db.Timestamp(6)
+  fecha_actualizacion DateTime? @default(now()) @db.Timestamp(6)
+  tickets             tickets[]
+}
+
+model ticket_tipos_solicitud {
+  id                  Int       @id @default(autoincrement())
+  nombre              String    @unique @db.VarChar(100)
+  descripcion         String?
+  activo              Int?      @default(1)
+  fecha_creacion      DateTime? @default(now()) @db.Timestamp(6)
+  fecha_actualizacion DateTime? @default(now()) @db.Timestamp(6)
+  tickets             tickets[]
+}
+
+model tickets {
+  id                                    Int                     @id @default(autoincrement())
+  user_id                               Int
+  empresa_id                            Int
+  modulo_id                             Int?
+  tipo_solicitud_id                     Int?
+  prioridad_id                          Int?
+  estado_id                             Int?
+  asignado_a                            Int?
+  descripcion                           String
+  fecha_creacion                        DateTime?               @default(now()) @db.Timestamp(6)
+  fecha_actualizacion                   DateTime?               @default(now()) @db.Timestamp(6)
+  ticket_messages                       ticket_messages[]
+  usuarios_tickets_asignado_aTousuarios usuarios?               @relation("tickets_asignado_aTousuarios", fields: [asignado_a], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  empresas                              empresas                @relation(fields: [empresa_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  ticket_estados                        ticket_estados?         @relation(fields: [estado_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ticket_modulos                        ticket_modulos?         @relation(fields: [modulo_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ticket_prioridades                    ticket_prioridades?     @relation(fields: [prioridad_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  ticket_tipos_solicitud                ticket_tipos_solicitud? @relation(fields: [tipo_solicitud_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usuarios_tickets_user_idTousuarios    usuarios                @relation("tickets_user_idTousuarios", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([asignado_a], map: "idx_tickets_asignado_a")
+  @@index([empresa_id], map: "idx_tickets_empresa_id")
+  @@index([estado_id], map: "idx_tickets_estado_id")
+  @@index([user_id], map: "idx_tickets_user_id")
+}
+
+model trigger_ejecuciones {
+  id                      Int       @id @default(autoincrement())
+  trigger_id              Int
+  trigger_nombre          String?
+  fecha_ejecucion         DateTime? @db.Timestamp(6)
+  estado                  String?   @default("exitoso")
+  notificaciones_enviadas Int?      @default(0)
+  empresas_procesadas     Int?      @default(0)
+  error_mensaje           String?
+  detalles                String?
+  triggers                triggers  @relation(fields: [trigger_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model triggers {
+  id                  Int                   @id @default(autoincrement())
+  nombre              String
+  descripcion         String?
+  frecuencia          String?               @default("diaria")
+  hora                String?               @default("08:00")
+  dias_semana         String?
+  dia_mes             Int?
+  intervalo_horas     Int?
+  destinatarios       String?
+  prioridades         String?               @default("CRITICA,ALTA,MEDIA")
+  activo              Int?                  @default(1)
+  ultima_ejecucion    DateTime?             @db.Timestamp(6)
+  proxima_ejecucion   DateTime?             @db.Timestamp(6)
+  creado_en           DateTime?             @default(now()) @db.Timestamp(6)
+  actualizado_en      DateTime?             @default(now()) @db.Timestamp(6)
+  trigger_ejecuciones trigger_ejecuciones[]
+
+  @@index([activo], map: "idx_triggers_activo")
+  @@index([proxima_ejecucion], map: "idx_triggers_proxima_ejecucion")
+}
+
+model usuario_empresas {
+  id                  Int       @id @default(autoincrement())
+  usuario_id          Int
+  empresa_id          Int
+  rol_en_empresa      String?   @default("usuario") @db.VarChar(50)
+  activo              Int?      @default(1)
+  fecha_creacion      DateTime? @default(now()) @db.Timestamp(6)
+  fecha_actualizacion DateTime? @default(now()) @db.Timestamp(6)
+  empresas            empresas  @relation(fields: [empresa_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  usuarios            usuarios  @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([usuario_id, empresa_id])
+}
+
+model usuarios {
+  id                                   Int                    @id @default(autoincrement())
+  username                             String                 @unique
+  password_hash                        String
+  nombre                               String
+  email                                String
+  rol                                  String?                @default("usuario")
+  activo                               Int?                   @default(1)
+  fecha_creacion                       DateTime?              @default(now()) @db.Timestamp(6)
+  fecha_actualizacion                  DateTime?              @default(now()) @db.Timestamp(6)
+  ultimo_acceso                        DateTime?              @db.Timestamp(6)
+  role_id                              Int
+  document_attachments                 document_attachments[]
+  empresas                             empresas[]
+  notificaciones                       notificaciones[]
+  plantillas                           plantillas[]
+  ticket_messages                      ticket_messages[]
+  tickets_tickets_asignado_aTousuarios tickets[]              @relation("tickets_asignado_aTousuarios")
+  tickets_tickets_user_idTousuarios    tickets[]              @relation("tickets_user_idTousuarios")
+  usuario_empresas                     usuario_empresas[]
+  roles                                roles                  @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model vencimientos_impuestos {
+  id                    Int                     @id @default(autoincrement())
+  impuesto_id           Int?
+  anio_fiscal           Int
+  periodo               String?                 @db.VarChar(10)
+  descripcion           String?
+  activo                Boolean?                @default(true)
+  created_at            DateTime?               @default(now()) @db.Timestamp(6)
+  updated_at            DateTime?               @default(now()) @db.Timestamp(6)
+  depende_nit           Boolean?                @default(false)
+  tipo_dependencia_nit  String?                 @db.VarChar(20)
+  dias_por_digito       Json?
+  digito                String?                 @db.VarChar(2)
+  fecha_vencimiento     DateTime?               @db.Date
+  calendario_tributario calendario_tributario[]
+  impuestos             impuestos?              @relation(fields: [impuesto_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([impuesto_id, anio_fiscal, periodo, digito], map: "vencimientos_impuestos_impuesto_id_anio_fiscal_periodo_digito_k")
+  @@index([activo], map: "idx_vencimientos_activo")
+  @@index([anio_fiscal], map: "idx_vencimientos_anio")
+  @@index([depende_nit], map: "idx_vencimientos_depende_nit", where: raw("(depende_nit = true)"))
+  @@index([depende_nit], map: "idx_vencimientos_fechas_por_digito", where: raw("(depende_nit = true)"))
+  @@index([impuesto_id, anio_fiscal], map: "idx_vencimientos_impuesto_anio")
+  @@index([impuesto_id], map: "idx_vencimientos_impuesto_id")
+}
+
+// Nuevos modelos para Información Exógena
+
+model vigencias_exogena {
+  id             Int      @id @default(autoincrement())
+  empresa_id     Int
+  anio_fiscal    Int
+  estado         String   @default("activo") @db.VarChar(20)
+  fecha_creacion DateTime @default(now()) @db.Timestamp(6)
+  empresas       empresas @relation(fields: [empresa_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  // Relaciones
+  plan_cuentas                plan_cuentas[]
+  asociaciones_cuenta_formato asociaciones_cuenta_formato[]
+
+  @@unique([empresa_id, anio_fiscal])
+  @@index([empresa_id], map: "idx_vigencias_exogena_empresa_id")
+  @@index([anio_fiscal], map: "idx_vigencias_exogena_anio_fiscal")
+}
+
+model formatos_exogena {
+  id          Int     @id @default(autoincrement())
+  anio_fiscal Int
+  codigo      String  @db.VarChar(10)
+  nombre      String  @db.VarChar(255)
+  descripcion String?
+  obligatorio Boolean @default(false)
+  activo      Boolean @default(true)
+
+  // Relaciones
+  conceptos_exogena            conceptos_exogena[]
+  campos_requeridos_formatos   campos_requeridos_formatos[]
+  asociaciones_cuenta_formato  asociaciones_cuenta_formato[]
+
+  @@unique([anio_fiscal, codigo])
+  @@index([anio_fiscal], map: "idx_formatos_exogena_anio_fiscal")
+}
+
+model campos_requeridos_formatos {
+  id           Int     @id @default(autoincrement())
+  formato_id   Int
+  atributo     String  @db.VarChar(100)
+  denominacion String? @db.VarChar(255)
+  tipo         String? @db.VarChar(50)
+  longitud     Int?
+  criterios    String?
+  formatos_exogena formatos_exogena @relation(fields: [formato_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([formato_id, atributo])
+  @@index([formato_id], map: "idx_campos_requeridos_formato_id")
+}
+
+model conceptos_exogena {
+  id          Int     @id @default(autoincrement())
+  anio_fiscal Int
+  formato_id  Int
+  codigo      String  @db.VarChar(20)
+  nombre      String  @db.VarChar(255)
+  descripcion String?
+  formatos_exogena formatos_exogena @relation(fields: [formato_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  // Relaciones
+  asociaciones_cuenta_formato asociaciones_cuenta_formato[]
+
+  @@unique([anio_fiscal, formato_id, codigo])
+  @@index([anio_fiscal], map: "idx_conceptos_exogena_anio_fiscal")
+  @@index([formato_id], map: "idx_conceptos_exogena_formato_id")
+}
+
+model plan_cuentas {
+  id          Int      @id @default(autoincrement())
+  vigencia_id Int
+  codigo      String   @db.VarChar(20)
+  nombre      String   @db.VarChar(255)
+  tipo        String?  @db.VarChar(50)
+  nivel       Int      @default(1)
+  padre_id    Int?
+  activo      Boolean  @default(true)
+  vigencias_exogena vigencias_exogena @relation(fields: [vigencia_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  padre             plan_cuentas?     @relation("plan_cuentas_hierarchy", fields: [padre_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  hijos             plan_cuentas[]    @relation("plan_cuentas_hierarchy")
+
+  // Relaciones
+  cuentas_auxiliares           cuentas_auxiliares[]
+  asociaciones_cuenta_formato  asociaciones_cuenta_formato[]
+
+  @@unique([vigencia_id, codigo])
+  @@index([vigencia_id], map: "idx_plan_cuentas_vigencia_id")
+  @@index([padre_id], map: "idx_plan_cuentas_padre_id")
+}
+
+model cuentas_auxiliares {
+  id             Int      @id @default(autoincrement())
+  plan_cuenta_id Int
+  codigo         String   @db.VarChar(20)
+  nombre         String   @db.VarChar(255)
+  tercero_id     Int?
+  saldo_anterior Decimal? @default(0) @db.Decimal(15, 2)
+  debito         Decimal? @default(0) @db.Decimal(15, 2)
+  credito        Decimal? @default(0) @db.Decimal(15, 2)
+  saldo_final    Decimal? @default(0) @db.Decimal(15, 2)
+  activo         Boolean  @default(true)
+  plan_cuentas   plan_cuentas  @relation(fields: [plan_cuenta_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  terceros       terceros?     @relation(fields: [tercero_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([plan_cuenta_id, codigo, tercero_id])
+  @@index([plan_cuenta_id], map: "idx_cuentas_auxiliares_plan_cuenta_id")
+  @@index([tercero_id], map: "idx_cuentas_auxiliares_tercero_id")
+}
+
+model asociaciones_cuenta_formato {
+  id          Int     @id @default(autoincrement())
+  vigencia_id Int
+  cuenta_id   Int
+  formato_id  Int
+  concepto_id Int?
+  categoria   String? @db.VarChar(100)
+  campo_valor String? @db.VarChar(20)
+  activo      Boolean @default(true)
+  vigencias_exogena vigencias_exogena @relation(fields: [vigencia_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  plan_cuentas       plan_cuentas       @relation(fields: [cuenta_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  formatos_exogena   formatos_exogena   @relation(fields: [formato_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  conceptos_exogena  conceptos_exogena? @relation(fields: [concepto_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([vigencia_id, cuenta_id, formato_id])
+  @@index([vigencia_id], map: "idx_asociaciones_vigencia_id")
+  @@index([cuenta_id], map: "idx_asociaciones_cuenta_id")
+  @@index([formato_id], map: "idx_asociaciones_formato_id")
+}
+
+model terceros {
+  id               Int      @id @default(autoincrement())
+  tipo_tercero     String   @db.VarChar(10) // 'NIT' o 'CC'
+  nit_cc           String   @unique @db.VarChar(20)
+  razon_social     String?  @db.VarChar(255) // Solo para NIT
+  nombre1          String   @db.VarChar(100) // Obligatorio
+  nombre2          String?  @db.VarChar(100)
+  apellido1        String?  @db.VarChar(100) // Obligatorio para CC
+  apellido2        String?  @db.VarChar(100)
+  direccion        String?  @db.VarChar(255)
+  codigo_municipio String?  @db.VarChar(10)
+  codigo_pais      String   @default("CO") @db.VarChar(10)
+  activo           Boolean  @default(true)
+
+  // Relaciones
+  cuentas_auxiliares cuentas_auxiliares[]
+
+  @@index([tipo_tercero], map: "idx_terceros_tipo_tercero")
+}
+
+model import_jobs {
+  id                Int       @id @default(autoincrement())
+  tipo              String    @db.VarChar(50) // 'plan_cuentas', 'cuentas_auxiliares', etc.
+  vigencia_id       Int
+  usuario_id        Int?
+  estado            String    @default("pending") @db.VarChar(20) // 'pending', 'processing', 'completed', 'failed'
+  progreso          Int       @default(0) // 0-100
+  total_filas       Int       @default(0)
+  filas_procesadas  Int       @default(0)
+  filas_exitosas    Int       @default(0)
+  filas_fallidas    Int       @default(0)
+  mensaje           String?   @db.Text
+  errores           Json?
+  advertencias      Json?
+  resultado         Json?
+  archivo_nombre    String?   @db.VarChar(255)
+  fecha_inicio      DateTime? @default(now()) @db.Timestamp(6)
+  fecha_fin         DateTime? @db.Timestamp(6)
+  created_at        DateTime  @default(now()) @db.Timestamp(6)
+  updated_at        DateTime  @default(now()) @db.Timestamp(6)
+
+  @@index([vigencia_id], map: "idx_import_jobs_vigencia")
+  @@index([estado], map: "idx_import_jobs_estado")
+  @@index([tipo], map: "idx_import_jobs_tipo")
+  @@index([fecha_inicio(sort: Desc)], map: "idx_import_jobs_fecha")
+}
