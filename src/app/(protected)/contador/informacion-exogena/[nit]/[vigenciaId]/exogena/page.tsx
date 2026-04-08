@@ -27,6 +27,7 @@ interface CampoRequerido {
     id: number;
     atributo: string;
     denominacion?: string | null;
+    tipo?: string | null;
 }
 
 interface AsociacionCuentaFormato {
@@ -74,6 +75,8 @@ interface CuentaAuxiliar {
     terceros?: TerceroRelacionado | null;
 }
 
+type CampoValor = 'saldo_anterior' | 'debito' | 'credito' | 'saldo_final';
+
 interface PreviewRow {
     id: string;
     concepto: string;
@@ -94,6 +97,100 @@ function formatAmount(value?: number | null) {
     }
 
     return FORMATEADOR_NUMERO.format(Number(value));
+}
+
+function parseFormattedNumber(value: string) {
+    const normalized = value.replace(/\./g, '').replace(',', '.').trim();
+
+    if (!normalized) {
+        return null;
+    }
+
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isLongField(campo: CampoRequerido) {
+    return campo.tipo?.toLowerCase().includes('long') ?? false;
+}
+
+function mergeColumnValue(campo: CampoRequerido, currentValue: string, nextValue: string) {
+    if (!currentValue) {
+        return nextValue;
+    }
+
+    if (!nextValue) {
+        return currentValue;
+    }
+
+    if (!isLongField(campo)) {
+        return currentValue;
+    }
+
+    const currentNumber = parseFormattedNumber(currentValue);
+    const nextNumber = parseFormattedNumber(nextValue);
+
+    if (currentNumber !== null && nextNumber !== null) {
+        return formatAmount(currentNumber + nextNumber);
+    }
+
+    return currentValue;
+}
+
+function aggregatePreviewRows(rows: PreviewRow[], campos: CampoRequerido[]) {
+    const groupedRows = new Map<string, PreviewRow>();
+
+    rows.forEach((row) => {
+        const groupKey = `${row.concepto}__${row.tercero}`;
+        const existing = groupedRows.get(groupKey);
+
+        if (!existing) {
+            groupedRows.set(groupKey, {
+                ...row,
+                valores: { ...row.valores }
+            });
+            return;
+        }
+
+        if (!existing.cuentaPuc && row.cuentaPuc) {
+            existing.cuentaPuc = row.cuentaPuc;
+        }
+
+        if (!existing.auxiliar && row.auxiliar) {
+            existing.auxiliar = row.auxiliar;
+        }
+
+        if (!existing.tercero && row.tercero) {
+            existing.tercero = row.tercero;
+        }
+
+        campos.forEach((campo) => {
+            existing.valores[campo.atributo] = mergeColumnValue(
+                campo,
+                existing.valores[campo.atributo] || '',
+                row.valores[campo.atributo] || ''
+            );
+        });
+    });
+
+    return Array.from(groupedRows.values());
+}
+
+function getAuxiliarAmountByCampoValor(
+    auxiliar: CuentaAuxiliar | null,
+    campoValor?: string | null
+) {
+    if (!auxiliar || !campoValor) {
+        return '';
+    }
+
+    const camposPermitidos: CampoValor[] = ['saldo_anterior', 'debito', 'credito', 'saldo_final'];
+
+    if (!camposPermitidos.includes(campoValor as CampoValor)) {
+        return '';
+    }
+
+    return formatAmount(auxiliar[campoValor as CampoValor] as number | null | undefined);
 }
 
 function getTerceroDisplayName(tercero?: TerceroRelacionado | null) {
@@ -157,17 +254,14 @@ function buildPreviewRows(
 
         auxiliares.forEach((auxiliar, index) => {
             const valores = Object.fromEntries(campos.map((campo) => [campo.atributo, '']));
+            const valorConfigurado = getAuxiliarAmountByCampoValor(auxiliar, asociacion.campo_valor);
 
             Object.entries(mapeo?.mapeo_terceros || {}).forEach(([atributo, campoTercero]) => {
                 valores[atributo] = getTerceroMappedValue(auxiliar?.terceros, campoTercero);
             });
 
             if (asociacion.categoria) {
-                valores[asociacion.categoria] = asociacion.cuenta_codigo || '';
-            }
-
-            if (asociacion.campo_valor && auxiliar) {
-                valores[asociacion.campo_valor] = formatAmount(auxiliar[asociacion.campo_valor as keyof CuentaAuxiliar] as number | null | undefined);
+                valores[asociacion.categoria] = valorConfigurado;
             }
 
             rows.push({
@@ -183,7 +277,7 @@ function buildPreviewRows(
         });
     });
 
-    return rows;
+    return aggregatePreviewRows(rows, campos);
 }
 
 export default function ExogenaPage() {
@@ -199,6 +293,7 @@ export default function ExogenaPage() {
     const [relacionesCount, setRelacionesCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [loadingPreview, setLoadingPreview] = useState(false);
+    const mostrarColumnaConcepto = previewRows.some((row) => row.concepto !== 'Sin concepto');
 
     useEffect(() => {
         void loadInitialData();
@@ -385,38 +480,92 @@ export default function ExogenaPage() {
                                 No hay relaciones disponibles para construir filas con el formato seleccionado.
                             </div>
                         ) : (
-                            <div className="overflow-x-auto rounded-lg border">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead className="min-w-[180px] text-black">Concepto</TableHead>
-                                            <TableHead className="min-w-[200px] text-black">Cuenta PUC</TableHead>
-                                            <TableHead className="min-w-[200px] text-black">Cuenta Auxiliar</TableHead>
-                                            <TableHead className="min-w-[180px] text-black">Tercero</TableHead>
+                            <div className="space-y-4">
+                                {/* <div>
+                                    <div className="mb-2 text-sm font-semibold text-gray-900">
+                                        Columnas del formato en horizontal
+                                    </div>
+                                    <div className="overflow-x-auto rounded-lg border bg-slate-50 p-3">
+                                        <div className="flex min-w-max gap-3">
+                                            <div className="min-w-[260px] rounded-lg border bg-slate-900 px-4 py-3 text-white shadow-sm">
+                                                <div className="text-sm font-semibold">
+                                                    Referencia de fila
+                                                </div>
+                                                <div className="mt-1 text-xs text-slate-300">
+                                                    Concepto, auxiliar y tercero
+                                                </div>
+
+                                                <div className="mt-4 space-y-2">
+                                                    {previewRows.map((row, index) => (
+                                                        <div key={`referencia-${row.id}`} className="min-h-[84px] rounded border border-slate-700 bg-slate-800 px-3 py-2">
+                                                            <div className="text-[11px] font-semibold text-cyan-300">Fila {index + 1}</div>
+                                                            <div className="mt-1 text-xs font-medium text-white">{row.concepto}</div>
+                                                            <div className="mt-1 text-[11px] text-slate-300">{row.auxiliar}</div>
+                                                            <div className="mt-1 text-[11px] text-slate-400">{row.tercero}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
                                             {campos.map((campo) => (
-                                                <TableHead key={campo.id} className="min-w-[180px] text-black">
-                                                    <div className="font-medium">{campo.denominacion || campo.atributo}</div>
-                                                    <div className="text-[11px] font-normal text-gray-500">{campo.atributo}</div>
-                                                </TableHead>
+                                                <div key={campo.id} className="min-w-[220px] rounded-lg border bg-white px-4 py-3 text-black shadow-sm">
+                                                    <div className="text-sm font-semibold text-gray-900">
+                                                        {campo.denominacion || campo.atributo}
+                                                    </div>
+                                                    <div className="mt-1 font-mono text-xs text-gray-500">
+                                                        {campo.atributo}
+                                                    </div>
+
+                                                    <div className="mt-4 space-y-2">
+                                                        {previewRows.map((row) => (
+                                                            <div key={`${campo.id}-${row.id}`} className="min-h-[84px] rounded border bg-slate-50 px-3 py-2 text-xs text-gray-800">
+                                                                {row.valores[campo.atributo] || (
+                                                                    <span className="italic text-gray-400">Sin valor</span>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
                                             ))}
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {previewRows.map((row) => (
-                                            <TableRow key={row.id} className="align-top text-sm text-black">
-                                                <TableCell>{row.concepto}</TableCell>
-                                                <TableCell>{row.cuentaPuc}</TableCell>
-                                                <TableCell>{row.auxiliar}</TableCell>
-                                                <TableCell>{row.tercero}</TableCell>
+                                        </div>
+                                    </div>
+                                </div> */}
+
+                                <div className="overflow-x-auto rounded-lg border">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                {mostrarColumnaConcepto ? (
+                                                    <TableHead className="min-w-[220px] text-black">
+                                                        <div className="font-medium">Concepto</div>
+                                                    </TableHead>
+                                                ) : null}
                                                 {campos.map((campo) => (
-                                                    <TableCell key={`${row.id}-${campo.id}`} className="whitespace-pre-wrap">
-                                                        {row.valores[campo.atributo] || ''}
-                                                    </TableCell>
+                                                    <TableHead key={campo.id} className="min-w-[180px] text-black">
+                                                        <div className="font-medium">{campo.denominacion || campo.atributo}</div>
+                                                        <div className="text-[11px] font-normal text-gray-500">{campo.atributo}</div>
+                                                    </TableHead>
                                                 ))}
                                             </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {previewRows.map((row) => (
+                                                <TableRow key={row.id} className="align-top text-sm text-black">
+                                                    {mostrarColumnaConcepto ? (
+                                                        <TableCell className="whitespace-pre-wrap font-medium">
+                                                            {row.concepto === 'Sin concepto' ? '' : row.concepto}
+                                                        </TableCell>
+                                                    ) : null}
+                                                    {campos.map((campo) => (
+                                                        <TableCell key={`${row.id}-${campo.id}`} className="whitespace-pre-wrap">
+                                                            {row.valores[campo.atributo] || ''}
+                                                        </TableCell>
+                                                    ))}
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
                             </div>
                         )}
                     </CardContent>
@@ -428,7 +577,7 @@ export default function ExogenaPage() {
                         Criterio de construcción de filas
                     </div>
                     <p className="mt-2">
-                        La vista previa toma las relaciones del formato desde el PUC, cruza las cuentas auxiliares de la vigencia y completa las columnas mapeadas a terceros. La columna elegida como categoría recibe el código de la cuenta PUC y la columna de valor usa el campo configurado en la asociación.
+                        La vista previa toma las relaciones del formato desde el PUC, cruza las cuentas auxiliares de la vigencia y completa las columnas mapeadas a terceros. La columna elegida como categoría recibe el valor numérico configurado en el plan de cuentas, tomado desde la cuenta auxiliar según el campo seleccionado: saldo anterior, débito, crédito o saldo final.
                     </p>
                 </div>
             </div>

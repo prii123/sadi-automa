@@ -52,6 +52,13 @@ interface CampoRequerido {
   criterios: string | null;
 }
 
+const inputClassName = 'text-black placeholder:text-black';
+const textareaClassName = 'text-black placeholder:text-black';
+const fileInputClassName = 'flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-black placeholder:text-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50';
+const nativeSelectClassName = 'flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-black';
+const tableClassName = 'text-black';
+const tableHeadClassName = 'text-black';
+
 export default function FormatosPage() {
   const params = useParams();
   const nit = params.nit as string;
@@ -858,6 +865,7 @@ export default function FormatosPage() {
                   <Input
                     id="anio_fiscal"
                     type="number"
+                    className={inputClassName}
                     value={nuevoFormato.anio_fiscal}
                     onChange={(e) => setNuevoFormato({ ...nuevoFormato, anio_fiscal: parseInt(e.target.value) || 2024 })}
                     placeholder="Ej: 2024"
@@ -867,6 +875,7 @@ export default function FormatosPage() {
                   <Label htmlFor="codigo">Código *</Label>
                   <Input
                     id="codigo"
+                    className={inputClassName}
                     value={nuevoFormato.codigo}
                     onChange={(e) => setNuevoFormato({ ...nuevoFormato, codigo: e.target.value })}
                     placeholder="Ej: 1001"
@@ -876,6 +885,7 @@ export default function FormatosPage() {
                   <Label htmlFor="nombre">Nombre *</Label>
                   <Input
                     id="nombre"
+                    className={inputClassName}
                     value={nuevoFormato.nombre}
                     onChange={(e) => setNuevoFormato({ ...nuevoFormato, nombre: e.target.value })}
                     placeholder="Nombre del formato"
@@ -885,6 +895,7 @@ export default function FormatosPage() {
                   <Label htmlFor="descripcion">Descripción</Label>
                   <Textarea
                     id="descripcion"
+                    className={textareaClassName}
                     value={nuevoFormato.descripcion}
                     onChange={(e) => setNuevoFormato({ ...nuevoFormato, descripcion: e.target.value })}
                     placeholder="Descripción opcional"
@@ -923,6 +934,7 @@ export default function FormatosPage() {
                 <Input
                   id="edit-anio-fiscal"
                   type="number"
+                  className={inputClassName}
                   value={formatoToEdit?.anio_fiscal || 2024}
                   onChange={(e) => setFormatoToEdit(formatoToEdit ? { ...formatoToEdit, anio_fiscal: parseInt(e.target.value) || 2024 } : null)}
                   placeholder="Ej: 2024"
@@ -932,6 +944,7 @@ export default function FormatosPage() {
                 <Label htmlFor="edit-codigo">Código *</Label>
                 <Input
                   id="edit-codigo"
+                  className={inputClassName}
                   value={formatoToEdit?.codigo || ''}
                   onChange={(e) => setFormatoToEdit(formatoToEdit ? { ...formatoToEdit, codigo: e.target.value } : null)}
                   placeholder="Ej: 1001"
@@ -941,6 +954,7 @@ export default function FormatosPage() {
                 <Label htmlFor="edit-nombre">Nombre *</Label>
                 <Input
                   id="edit-nombre"
+                  className={inputClassName}
                   value={formatoToEdit?.nombre || ''}
                   onChange={(e) => setFormatoToEdit(formatoToEdit ? { ...formatoToEdit, nombre: e.target.value } : null)}
                   placeholder="Nombre del formato"
@@ -950,6 +964,7 @@ export default function FormatosPage() {
                 <Label htmlFor="edit-descripcion">Descripción</Label>
                 <Textarea
                   id="edit-descripcion"
+                  className={textareaClassName}
                   value={formatoToEdit?.descripcion || ''}
                   onChange={(e) => setFormatoToEdit(formatoToEdit ? { ...formatoToEdit, descripcion: e.target.value } : null)}
                   placeholder="Descripción opcional"
@@ -1013,6 +1028,7 @@ export default function FormatosPage() {
                           <Label htmlFor="concepto-codigo">Código *</Label>
                           <Input
                             id="concepto-codigo"
+                            className={inputClassName}
                             value={nuevoConcepto.codigo}
                             onChange={(e) => setNuevoConcepto({ ...nuevoConcepto, codigo: e.target.value })}
                             placeholder="Ej: CON001"
@@ -1022,6 +1038,7 @@ export default function FormatosPage() {
                           <Label htmlFor="concepto-nombre">Nombre *</Label>
                           <Input
                             id="concepto-nombre"
+                            className={inputClassName}
                             value={nuevoConcepto.nombre}
                             onChange={(e) => setNuevoConcepto({ ...nuevoConcepto, nombre: e.target.value })}
                             placeholder="Nombre del concepto"
@@ -1031,6 +1048,7 @@ export default function FormatosPage() {
                           <Label htmlFor="concepto-descripcion">Descripción</Label>
                           <Input
                             id="concepto-descripcion"
+                            className={inputClassName}
                             value={nuevoConcepto.descripcion}
                             onChange={(e) => setNuevoConcepto({ ...nuevoConcepto, descripcion: e.target.value })}
                             placeholder="Descripción opcional"
@@ -1062,7 +1080,7 @@ export default function FormatosPage() {
                           accept=".csv"
                           ref={conceptoFileRef}
                           onChange={handleConceptoFileUpload}
-                          className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50"
+                          className={fileInputClassName}
                         />
                         <p className="text-sm text-black mt-1">
                           El archivo debe contener las columnas: codigo, nombre, descripcion
@@ -1098,9 +1116,9 @@ export default function FormatosPage() {
                             <Table>
                               <TableHeader>
                                 <TableRow>
-                                  <TableHead>Código</TableHead>
-                                  <TableHead>Nombre</TableHead>
-                                  <TableHead>Descripción</TableHead>
+                                  <TableHead className={tableHeadClassName}>Código</TableHead>
+                                  <TableHead className={tableHeadClassName}>Nombre</TableHead>
+                                  <TableHead className={tableHeadClassName}>Descripción</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
@@ -1154,10 +1172,10 @@ export default function FormatosPage() {
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead>Código</TableHead>
-                              <TableHead>Nombre</TableHead>
-                              <TableHead>Descripción</TableHead>
-                              <TableHead className="w-20">Acciones</TableHead>
+                              <TableHead className={tableHeadClassName}>Código</TableHead>
+                              <TableHead className={tableHeadClassName}>Nombre</TableHead>
+                              <TableHead className={tableHeadClassName}>Descripción</TableHead>
+                              <TableHead className="w-20 text-black">Acciones</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -1206,6 +1224,7 @@ export default function FormatosPage() {
                           <Label htmlFor="campo-atributo">Atributo *</Label>
                           <Input
                             id="campo-atributo"
+                            className={inputClassName}
                             value={nuevoCampo.atributo}
                             onChange={(e) => setNuevoCampo({ ...nuevoCampo, atributo: e.target.value })}
                             placeholder="Ej: nit"
@@ -1215,6 +1234,7 @@ export default function FormatosPage() {
                           <Label htmlFor="campo-denominacion">Denominación *</Label>
                           <Input
                             id="campo-denominacion"
+                            className={inputClassName}
                             value={nuevoCampo.denominacion}
                             onChange={(e) => setNuevoCampo({ ...nuevoCampo, denominacion: e.target.value })}
                             placeholder="Ej: NIT del informado"
@@ -1226,7 +1246,7 @@ export default function FormatosPage() {
                             id="campo-tipo"
                             value={nuevoCampo.tipo}
                             onChange={(e) => setNuevoCampo({ ...nuevoCampo, tipo: e.target.value })}
-                            className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                            className={nativeSelectClassName}
                           >
                             <option value="Texto">Texto</option>
                             <option value="Número">Número</option>
@@ -1239,6 +1259,7 @@ export default function FormatosPage() {
                           <Input
                             id="campo-longitud"
                             type="number"
+                            className={inputClassName}
                             value={nuevoCampo.longitud}
                             onChange={(e) => setNuevoCampo({ ...nuevoCampo, longitud: parseInt(e.target.value) || 100 })}
                             placeholder="100"
@@ -1248,6 +1269,7 @@ export default function FormatosPage() {
                           <Label htmlFor="campo-criterios">Criterios</Label>
                           <Input
                             id="campo-criterios"
+                            className={inputClassName}
                             value={nuevoCampo.criterios}
                             onChange={(e) => setNuevoCampo({ ...nuevoCampo, criterios: e.target.value })}
                             placeholder="Ej: Obligatorio, sin guiones ni puntos"
@@ -1279,7 +1301,7 @@ export default function FormatosPage() {
                           accept=".csv"
                           ref={campoFileRef}
                           onChange={handleCampoFileUpload}
-                          className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50"
+                          className={fileInputClassName}
                         />
                         <p className="text-sm text-black mt-1">
                           El archivo debe contener las columnas: atributo, denominacion, tipo, longitud, criterios
@@ -1312,19 +1334,19 @@ export default function FormatosPage() {
                         <div>
                           <h4 className="font-medium mb-2 text-black">Vista previa ({bulkCampos.length} campos):</h4>
                           <div className="max-h-40 overflow-y-auto border rounded p-2">
-                            <Table>
+                            <Table className={tableClassName}>
                               <TableHeader>
                                 <TableRow>
-                                  <TableHead>Atributo</TableHead>
-                                  <TableHead>Denominación</TableHead>
-                                  <TableHead>Tipo</TableHead>
-                                  <TableHead>Longitud</TableHead>
-                                  <TableHead>Criterios</TableHead>
+                                  <TableHead className={tableHeadClassName}>Atributo</TableHead>
+                                  <TableHead className={tableHeadClassName}>Denominación</TableHead>
+                                  <TableHead className={tableHeadClassName}>Tipo</TableHead>
+                                  <TableHead className={tableHeadClassName}>Longitud</TableHead>
+                                  <TableHead className={tableHeadClassName}>Criterios</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
                                 {bulkCampos.slice(0, 5).map((campo, index) => (
-                                  <TableRow key={index}>
+                                  <TableRow key={index} className="text-black">
                                     <TableCell className="font-medium text-black">{campo.atributo}</TableCell>
                                     <TableCell className="font-medium text-black">{campo.denominacion}</TableCell>
                                     <TableCell className="font-medium text-black">{campo.tipo}</TableCell>
@@ -1372,15 +1394,15 @@ export default function FormatosPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="border rounded-lg overflow-x-auto">
-                        <Table>
+                        <Table className={tableClassName}>
                           <TableHeader>
                             <TableRow>
-                              <TableHead>Atributo</TableHead>
-                              <TableHead>Denominación</TableHead>
-                              <TableHead>Tipo</TableHead>
-                              <TableHead>Longitud</TableHead>
-                              <TableHead>Criterios</TableHead>
-                              <TableHead className="w-20">Acciones</TableHead>
+                              <TableHead className={tableHeadClassName}>Atributo</TableHead>
+                              <TableHead className={tableHeadClassName}>Denominación</TableHead>
+                              <TableHead className={tableHeadClassName}>Tipo</TableHead>
+                              <TableHead className={tableHeadClassName}>Longitud</TableHead>
+                              <TableHead className={tableHeadClassName}>Criterios</TableHead>
+                              <TableHead className="w-20 text-black">Acciones</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -1392,12 +1414,12 @@ export default function FormatosPage() {
                               </TableRow>
                             ) : (
                               camposRequeridos.map((campo) => (
-                                <TableRow key={campo.id}>
+                                <TableRow key={campo.id} className="text-black">
                                   <TableCell className="font-medium text-black">{campo.atributo}</TableCell>
                                   <TableCell className="font-medium text-black">{campo.denominacion}</TableCell>
                                   <TableCell className="font-medium text-black">{campo.tipo}</TableCell>
                                   <TableCell className="font-medium text-black">{campo.longitud}</TableCell>
-                                  <TableCell>
+                                  <TableCell className="text-black">
                                     {campo.criterios ? (
                                       <span className={campo.criterios.toLowerCase().includes('obligatorio') ? 'text-red-600 font-medium' : ''}>
                                         {campo.criterios}
@@ -1449,6 +1471,7 @@ export default function FormatosPage() {
                               </Label>
                               <Input
                                 id={campo.atributo}
+                                className={inputClassName}
                                 value={nuevoDato[campo.atributo] || ''}
                                 onChange={(e) => setNuevoDato({ ...nuevoDato, [campo.atributo]: e.target.value })}
                                 required={campo.criterios?.toLowerCase().includes('obligatorio')}
@@ -1492,7 +1515,7 @@ export default function FormatosPage() {
                               type="file"
                               accept=".csv"
                               onChange={handleDatosFileUpload}
-                              className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50"
+                              className={fileInputClassName}
                             />
                             <p className="text-sm text-black mt-1">
                               El archivo debe contener las columnas: {camposRequeridos.map(c => c.atributo).join(', ')}
@@ -1719,9 +1742,9 @@ export default function FormatosPage() {
                                       <Table>
                                         <TableHeader>
                                           <TableRow>
-                                            <TableHead>Código</TableHead>
-                                            <TableHead>Nombre</TableHead>
-                                            <TableHead>Descripción</TableHead>
+                                            <TableHead className={tableHeadClassName}>Código</TableHead>
+                                            <TableHead className={tableHeadClassName}>Nombre</TableHead>
+                                            <TableHead className={tableHeadClassName}>Descripción</TableHead>
                                           </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -1784,6 +1807,7 @@ export default function FormatosPage() {
                                   <Label htmlFor="concepto-codigo">Código *</Label>
                                   <Input
                                     id="concepto-codigo"
+                                    className={inputClassName}
                                     value={nuevoConcepto.codigo}
                                     onChange={(e) => setNuevoConcepto({ ...nuevoConcepto, codigo: e.target.value })}
                                     placeholder="Ej: CON001"
@@ -1793,6 +1817,7 @@ export default function FormatosPage() {
                                   <Label htmlFor="concepto-nombre">Nombre *</Label>
                                   <Input
                                     id="concepto-nombre"
+                                    className={inputClassName}
                                     value={nuevoConcepto.nombre}
                                     onChange={(e) => setNuevoConcepto({ ...nuevoConcepto, nombre: e.target.value })}
                                     placeholder="Nombre del concepto"
@@ -1802,6 +1827,7 @@ export default function FormatosPage() {
                                   <Label htmlFor="concepto-descripcion">Descripción</Label>
                                   <Textarea
                                     id="concepto-descripcion"
+                                    className={textareaClassName}
                                     value={nuevoConcepto.descripcion}
                                     onChange={(e) => setNuevoConcepto({ ...nuevoConcepto, descripcion: e.target.value })}
                                     placeholder="Descripción opcional"
@@ -1825,10 +1851,10 @@ export default function FormatosPage() {
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead>Código</TableHead>
-                              <TableHead>Nombre</TableHead>
-                              <TableHead>Descripción</TableHead>
-                              <TableHead className="w-20">Acciones</TableHead>
+                              <TableHead className={tableHeadClassName}>Código</TableHead>
+                              <TableHead className={tableHeadClassName}>Nombre</TableHead>
+                              <TableHead className={tableHeadClassName}>Descripción</TableHead>
+                              <TableHead className="w-20 text-black">Acciones</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -1895,7 +1921,7 @@ export default function FormatosPage() {
                                     accept=".csv"
                                     ref={campoFileRef}
                                     onChange={handleCampoFileUpload}
-                                    className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-black focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50"
+                                    className={fileInputClassName}
                                   />
                                   <p className="text-sm text-black mt-1">
                                     El archivo debe contener las columnas: campo, requerido
@@ -1922,11 +1948,11 @@ export default function FormatosPage() {
                                       <Table>
                                         <TableHeader>
                                           <TableRow>
-                                            <TableHead>Atributo</TableHead>
-                                            <TableHead>Denominación</TableHead>
-                                            <TableHead>Tipo</TableHead>
-                                            <TableHead>Longitud</TableHead>
-                                            <TableHead>Criterios</TableHead>
+                                            <TableHead className={tableHeadClassName}>Atributo</TableHead>
+                                            <TableHead className={tableHeadClassName}>Denominación</TableHead>
+                                            <TableHead className={tableHeadClassName}>Tipo</TableHead>
+                                            <TableHead className={tableHeadClassName}>Longitud</TableHead>
+                                            <TableHead className={tableHeadClassName}>Criterios</TableHead>
                                           </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -1991,6 +2017,7 @@ export default function FormatosPage() {
                                   <Label htmlFor="dialog-campo-atributo">Atributo *</Label>
                                   <Input
                                     id="dialog-campo-atributo"
+                                    className={inputClassName}
                                     value={nuevoCampo.atributo}
                                     onChange={(e) => setNuevoCampo({ ...nuevoCampo, atributo: e.target.value })}
                                     placeholder="Ej: nit"
@@ -2000,6 +2027,7 @@ export default function FormatosPage() {
                                   <Label htmlFor="dialog-campo-denominacion">Denominación *</Label>
                                   <Input
                                     id="dialog-campo-denominacion"
+                                    className={inputClassName}
                                     value={nuevoCampo.denominacion}
                                     onChange={(e) => setNuevoCampo({ ...nuevoCampo, denominacion: e.target.value })}
                                     placeholder="Ej: NIT del informado"
@@ -2011,7 +2039,7 @@ export default function FormatosPage() {
                                     id="dialog-campo-tipo"
                                     value={nuevoCampo.tipo}
                                     onChange={(e) => setNuevoCampo({ ...nuevoCampo, tipo: e.target.value })}
-                                    className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                                    className={nativeSelectClassName}
                                   >
                                     <option value="Texto">Texto</option>
                                     <option value="Número">Número</option>
@@ -2024,6 +2052,7 @@ export default function FormatosPage() {
                                   <Input
                                     id="dialog-campo-longitud"
                                     type="number"
+                                    className={inputClassName}
                                     value={nuevoCampo.longitud}
                                     onChange={(e) => setNuevoCampo({ ...nuevoCampo, longitud: parseInt(e.target.value) || 100 })}
                                     placeholder="100"
@@ -2033,6 +2062,7 @@ export default function FormatosPage() {
                                   <Label htmlFor="dialog-campo-criterios">Criterios</Label>
                                   <Input
                                     id="dialog-campo-criterios"
+                                    className={inputClassName}
                                     value={nuevoCampo.criterios}
                                     onChange={(e) => setNuevoCampo({ ...nuevoCampo, criterios: e.target.value })}
                                     placeholder="Ej: Obligatorio, sin guiones ni puntos"
@@ -2056,12 +2086,12 @@ export default function FormatosPage() {
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead>Atributo</TableHead>
-                              <TableHead>Denominación</TableHead>
-                              <TableHead>Tipo</TableHead>
-                              <TableHead>Longitud</TableHead>
-                              <TableHead>Criterios</TableHead>
-                              <TableHead className="w-20">Acciones</TableHead>
+                              <TableHead className={tableHeadClassName}>Atributo</TableHead>
+                              <TableHead className={tableHeadClassName}>Denominación</TableHead>
+                              <TableHead className={tableHeadClassName}>Tipo</TableHead>
+                              <TableHead className={tableHeadClassName}>Longitud</TableHead>
+                              <TableHead className={tableHeadClassName}>Criterios</TableHead>
+                              <TableHead className="w-20 text-black">Acciones</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
