@@ -19,7 +19,7 @@ export default function InformacionExogenaModulosPage() {
   const router = useRouter();
   const nit = params.nit as string;
   const vigenciaId = params.vigenciaId as string;
-  
+
   const [vigencia, setVigencia] = useState<Vigencia | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -77,6 +77,13 @@ export default function InformacionExogenaModulosPage() {
       icon: Users,
       href: `/contador/informacion-exogena/${nit}/${vigenciaId}/terceros`,
       color: 'text-red-600'
+    },
+    {
+      title: 'Generar Exógena',
+      description: 'Preparar y generar los archivos de información exógena',
+      icon: FileText,
+      href: `/contador/informacion-exogena/${nit}/${vigenciaId}/exogena`,
+      color: 'text-cyan-600'
     }
   ];
 

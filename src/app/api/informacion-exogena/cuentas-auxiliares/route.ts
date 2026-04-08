@@ -33,10 +33,16 @@ export async function GET(request: NextRequest) {
           },
           terceros: {
             select: {
+              tipo_tercero: true,
               nit_cc: true,
+              nombre2: true,
+              apellido2: true,
               nombre1: true,
               apellido1: true,
-              razon_social: true
+              razon_social: true,
+              direccion: true,
+              codigo_municipio: true,
+              codigo_pais: true
             }
           }
         },
@@ -60,10 +66,16 @@ export async function GET(request: NextRequest) {
           },
           terceros: {
             select: {
+              tipo_tercero: true,
               nit_cc: true,
+              nombre2: true,
+              apellido2: true,
               nombre1: true,
               apellido1: true,
-              razon_social: true
+              razon_social: true,
+              direccion: true,
+              codigo_municipio: true,
+              codigo_pais: true
             }
           }
         },
@@ -288,8 +300,8 @@ export async function DELETE(request: NextRequest) {
       where: { id: parseInt(id) }
     });
 
-    return NextResponse.json({ 
-      message: 'Cuenta auxiliar eliminada exitosamente' 
+    return NextResponse.json({
+      message: 'Cuenta auxiliar eliminada exitosamente'
     });
   } catch (error) {
     console.error('Error deleting cuenta auxiliar:', error);

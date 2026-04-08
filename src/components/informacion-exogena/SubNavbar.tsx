@@ -2,7 +2,7 @@
 
 import { useParams, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { FileText, Upload, Settings, Users, Link as LinkIcon } from 'lucide-react';
+import { FileSpreadsheet, FileText, Upload, Settings, Users, Link as LinkIcon } from 'lucide-react';
 
 export default function SubNavbar() {
   const params = useParams();
@@ -50,6 +50,14 @@ export default function SubNavbar() {
       color: 'text-red-600',
       hoverBg: 'hover:bg-red-50',
       activeBg: 'bg-red-50'
+    },
+    {
+      title: 'Exógena',
+      href: `/contador/informacion-exogena/${nit}/${vigenciaId}/exogena`,
+      icon: FileSpreadsheet,
+      color: 'text-cyan-600',
+      hoverBg: 'hover:bg-cyan-50',
+      activeBg: 'bg-cyan-50'
     }
   ];
 
@@ -65,11 +73,10 @@ export default function SubNavbar() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors text-sm font-medium ${
-                  isActive
+                className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors text-sm font-medium ${isActive
                     ? `${item.color} ${item.activeBg} border-b-2 border-current`
                     : `text-gray-600 ${item.hoverBg} hover:text-gray-900`
-                }`}
+                  }`}
               >
                 <Icon className={`h-4 w-4 ${isActive ? item.color : ''}`} />
                 <span>{item.title}</span>
