@@ -6,7 +6,19 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-const connectionString = process.env.DATABASE_URL;
+function getDatabaseUrl() {
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+
+  if (databaseUrl) {
+    return databaseUrl;
+  }
+
+  throw new Error(
+    'DATABASE_URL no esta configurada. En produccion debes definir esta variable de entorno para conectar Prisma a PostgreSQL.'
+  );
+}
+
+const connectionString = getDatabaseUrl();
 
 const pool = new Pool({
   connectionString,

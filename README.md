@@ -20,6 +20,8 @@ DB_USER=tu_usuario
 DB_PASSWORD=tu_contraseña
 ```
 
+En despliegues como Vercel debes configurar `DATABASE_URL` en las variables de entorno del proyecto. Si no existe, la aplicación no podrá conectarse a PostgreSQL.
+
 ### 2. Instalar dependencias
 
 ```bash
